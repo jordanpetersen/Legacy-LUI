@@ -26,6 +26,7 @@ local iconlist = {
 	Role = {"LFDRole"},
 	Raid = {"RaidIcon"},
 	ReadyCheck = {"ReadyCheck"},
+	PhaseIcon = {"PhaseIcon"},
 }
 
 -- needed for moving frames and some other things
@@ -931,14 +932,16 @@ function module:CreatePortraitOptions(unit, order)
 	return options
 end
 
--- iconType: "PvP", "Combat", "Resting", "Lootmaster", "Leader", "Role", "Raid", "ReadyCheck"
+-- iconType: "PvP", "Combat", "Resting", "Lootmaster", "Leader", "Role", "Raid", "ReadyCheck", "PhaseIcon"
 function module:CreateIconOptions(unit, order, iconType)
 	local disabledFunc = function() return not self.db[unit].Icons[iconType].Enable end
 
 	local applySettings = function()
 		for _, frame in pairs(self.framelist[unit]) do
 			if _G[frame] then
-				module.funcs[iconlist[iconType][1]](_G[frame], _G[frame].__unit, self.db[unit])
+				if module.funcs[iconlist[iconType][1]] then
+					module.funcs[iconlist[iconType][1]](_G[frame], _G[frame].__unit, self.db[unit])
+				end
 				for _, icon in pairs(iconlist[iconType]) do
 					if self.db[unit].Icons[iconType].Enable then
 						_G[frame]:EnableElement(icon)
@@ -1171,6 +1174,7 @@ function module:CreateUnitOptions(unit, order)
 			Role = self.db[unit].Icons.Role and self:CreateIconOptions(unit, 6, "Role") or nil,
 			Raid = self.db[unit].Icons.Raid and self:CreateIconOptions(unit, 7, "Raid") or nil,
 			ReadyCheck = self.db[unit].Icons.ReadyCheck and self:CreateIconOptions(unit, 8, "ReadyCheck") or nil,
+			PhaseIcon = self.db[unit].Icons.PhaseIcon and self:CreateIconOptions(unit, 9, "PhaseIcon") or nil,
 		}) or nil,
 	})
 

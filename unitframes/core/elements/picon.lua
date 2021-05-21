@@ -18,7 +18,7 @@
    local PhaseIcon = self:CreateTexture(nil, 'OVERLAY')
    PhaseIcon:SetSize(16, 16)
    PhaseIcon:SetPoint('TOPLEFT', self)
-   
+
    -- Register it with oUF
    self.PhaseIcon = PhaseIcon
 
@@ -32,21 +32,22 @@
 local parent, ns = ...
 local oUF = ns.oUF
 
-local Update = function(self, event)
+
+local Update = function(self, event, unit)
 	local picon = self.PhaseIcon
 	if(picon.PreUpdate) then
 		picon:PreUpdate()
 	end
 
-	local inPhase = UnitInPhase(self.unit)
-	if(inPhase) then
-		picon:Hide()
-	else
+	local phaseReason = UnitPhaseReason(unit)
+	if phaseReason then
 		picon:Show()
+	else
+		picon:Hide()
 	end
 
 	if(picon.PostUpdate) then
-		return picon:PostUpdate(inPhase)
+		return picon:PostUpdate(phaseReason)
 	end
 end
 

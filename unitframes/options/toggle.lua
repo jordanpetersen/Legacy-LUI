@@ -34,6 +34,7 @@ local iconlist = {
 	Role = {"LFDRole"},
 	Raid = {"RaidIcon"},
 	ReadyCheck = {"ReadyCheck"},
+	PhaseIcon = {"PhaseIcon"},
 }
 
 local function GetOpposite(dir)
@@ -307,8 +308,8 @@ module.ToggleUnit = setmetatable({
 							if not IsInRaid() then
 								party:Show()
 							else
-								-- GetNumGroupMembers() - total number of players in the group (either party or raid), 0 if not in a group. 
-								-- GetNumSubgroupMembers() - number of players in the player's sub-group, excluding the player. 
+								-- GetNumGroupMembers() - total number of players in the group (either party or raid), 0 if not in a group.
+								-- GetNumSubgroupMembers() - number of players in the player's sub-group, excluding the player.
 								local numraid = GetNumGroupMembers()
 								local numparty = GetNumSubgroupMembers()
 								if module.db.Party.ShowInRealParty then
@@ -933,7 +934,7 @@ module.ApplySettings = function(unit)
 						frame.ClassIcons:Hide()
 					end
 				end
-				
+
 				-- arcane changes
 				if class == "MAGE" then
 					module.funcs.ClassIcons(frame, frame.__unit, module.db.Player)

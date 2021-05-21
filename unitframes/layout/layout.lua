@@ -26,7 +26,7 @@ local mediaPath = [=[Interface\Addons\LUI\media\]=]
 
 local floor = math.floor
 local format = string.format
-local GetGlyphSocketInfo = GetGlyphSocketInfo 
+local GetGlyphSocketInfo = GetGlyphSocketInfo
 
 local normTex = mediaPath..[=[textures\statusbars\normTex]=]
 local glowTex = mediaPath..[=[textures\statusbars\glowTex]=]
@@ -136,12 +136,12 @@ do
 
 	-- if class == "MAGE" then
 		-- local arcaneMissiles = GetSpellInfo(5143)
--- 
+--
 		-- local function talentUpdate()
 			-- local rank = select(5, GetTalentInfo(1, 10)) -- Missile Barrage talent
 			-- channelingTicks[arcaneMissiles] = rank == 0 and 0.75 or (0.7 - (rank / 10))
 		-- end
--- 
+--
 		-- module:RegisterEvent("PLAYER_TALENT_UPDATE", talentUpdate)
 		-- talentUpdate()
 	-- end
@@ -1016,7 +1016,7 @@ local CPointsOverride = function(self, event, unit)
 end
 
 local WarlockBarOverride = function(self, event, unit, powerType)
-	local specNum = GetSpecialization() 
+	local specNum = GetSpecialization()
 	local spec = self.WarlockBar.SpecInfo[specNum]
 	if not spec then return end
 	if self.unit ~= unit or (powerType and powerType ~= spec.powerType) then return end
@@ -1034,7 +1034,7 @@ local WarlockBarOverride = function(self, event, unit, powerType)
 	elseif specNum == 2 then
 		text = num
 		self.WarlockBar[1]:SetAlpha(1)
-		self.WarlockBar[1]:SetValue(num)	
+		self.WarlockBar[1]:SetValue(num)
 	--Destruction
 	elseif specNum == 3 then
 		local power = UnitPower(unit, spec.unitPower, true)
@@ -1096,24 +1096,24 @@ local TotemsOverride = function(self, event, slot)
 	local color = module.colors.totems[slot] or colors[slot]
 	totem[slot]:SetStatusBarColor(unpack(color))
 	totem[slot]:SetValue(0)
-	
+
 	-- Multipliers
 	if (totem[slot].bg.multiplier) then
 		local mu = totem[slot].bg.multiplier
 		local r, g, b = totem[slot]:GetStatusBarColor()
 		r, g, b = r*mu, g*mu, b*mu
-		totem[slot].bg:SetVertexColor(r, g, b) 
+		totem[slot].bg:SetVertexColor(r, g, b)
 	end
-	
+
 	totem[slot].ID = slot
 
 	if(haveTotem) then
-		
+
 		if totem[slot].Name then
 			totem[slot].Name:SetText(Abbrev(name))
-		end					
-		if(duration >= 0) then	
-			totem[slot]:SetValue(1 - ((GetTime() - startTime) / duration))	
+		end
+		if(duration >= 0) then
+			totem[slot]:SetValue(1 - ((GetTime() - startTime) / duration))
 			-- Status bar update
 			totem[slot]:SetScript("OnUpdate",function(self,elapsed)
 					total = total + elapsed
@@ -1126,14 +1126,14 @@ local TotemsOverride = function(self, event, slot)
 								self:SetValue(1 - ((GetTime() - startTime) / duration))
 							end
 					end
-				end)					
+				end)
 		else
 			-- There's no need to update because it doesn't have any duration
 			totem[slot]:SetScript("OnUpdate",nil)
 			totem[slot]:SetValue(0)
-		end 
+		end
 	else
-		-- No totem = no time 
+		-- No totem = no time
 		if totem[slot].Name then
 			totem[slot].Name:SetText(" ")
 		end
@@ -1881,6 +1881,14 @@ module.funcs = {
 		self.ReadyCheck:ClearAllPoints()
 		self.ReadyCheck:SetPoint(oufdb.Icons.ReadyCheck.Point, self, oufdb.Icons.ReadyCheck.Point, oufdb.Icons.ReadyCheck.X, oufdb.Icons.ReadyCheck.Y)
 	end,
+	PhaseIcon = function(self, unit, oufdb)
+		if not self.PhaseIcon then self.PhaseIcon = self.Overlay:CreateTexture(nil, "OVERLAY") end
+
+		self.PhaseIcon:SetHeight(oufdb.Icons.PhaseIcon.Size)
+		self.PhaseIcon:SetWidth(oufdb.Icons.PhaseIcon.Size)
+		self.PhaseIcon:ClearAllPoints()
+		self.PhaseIcon:SetPoint(oufdb.Icons.PhaseIcon.Point, self, oufdb.Icons.PhaseIcon.Point, oufdb.Icons.PhaseIcon.X, oufdb.Icons.PhaseIcon.Y)
+	end,
 
 	-- player specific
 	Experience = function(self, unit, ouf_xp_rep)
@@ -2034,12 +2042,12 @@ module.funcs = {
 					if min == max then
 						min, max, value = 41000, 42000, 42000
 					end
-					
+
 					barMax = max - min
 					barValue = value - min
 					barMin = 0
 					percentBar = barValue * 100 / barMax
-					
+
 					self.Reputation:SetMinMaxValues(barMin, barMax)
 					self.Reputation:SetValue(barValue)
 					self.Reputation.Value:SetFormattedText("%d / %d (%d%%)", barValue, barMax, percentBar)
@@ -2129,7 +2137,7 @@ module.funcs = {
 		if not self.Runes then
 			self.Runes = CreateFrame("Frame", nil, self)
 			self.Runes:SetFrameLevel(6)
-				
+
 			for i = 1, 6 do
 				self.Runes[i] = CreateFrame("StatusBar", nil, self.Runes, "BackdropTemplate")
 				self.Runes[i]:SetBackdrop(backdrop)
@@ -2196,7 +2204,7 @@ module.funcs = {
 		elseif class == "ROGUE" then r, g, b = unpack(module.colors.combopoints[1])
 		elseif class == "DRUID" then r, g, b = unpack(module.colors.combopoints[1])
 		end
-		
+
 		if class == "MONK" then oufdb.Bars.ClassIcons = oufdb.Bars.Chi
 		elseif class == "PALADIN" then oufdb.Bars.ClassIcons = oufdb.Bars.HolyPower
 		elseif class == "MAGE" then oufdb.Bars.ClassIcons = oufdb.Bars.ArcaneCharges
@@ -2204,7 +2212,7 @@ module.funcs = {
 		elseif class == "ROGUE" then oufdb.Bars.ClassIcons = oufdb.Bars.Chi
 		elseif class == "DRUID" then oufdb.Bars.ClassIcons = oufdb.Bars.Chi
 		end
-		
+
 		if not self.ClassIcons then
 			self.ClassIcons = CreateFrame("Frame", nil, self, "BackdropTemplate")
 			self.ClassIcons:SetFrameLevel(6)
@@ -2228,7 +2236,7 @@ module.funcs = {
 		self.ClassIcons:SetWidth(oufdb.Bars.ClassIcons.Width)
 		self.ClassIcons:ClearAllPoints()
 		self.ClassIcons:SetPoint("BOTTOMLEFT", self, "TOPLEFT", x, y)
-	
+
 		local function checkPowers(event, level)
 			local pLevel = (event == "UNIT_LEVEL") and tonumber(level) or UnitLevel("player")
 			local count = BASE_COUNT[class]
@@ -2326,7 +2334,7 @@ module.funcs = {
 		self.AltPowerBar.Smooth = module.db.Player.Bars.AltPower.Smooth
 		self.AltPowerBar.color = module.db.Player.Bars.AltPower.Color
 		self.AltPowerBar.colorIndividual = module.db.Player.Bars.AltPower.IndividualColor
-		
+
 		self.AltPowerBar.Text:SetFont(Media:Fetch("font", module.db.Player.Texts.AltPower.Font), module.db.Player.Texts.AltPower.Size, module.db.Player.Texts.AltPower.Outline)
 		self.AltPowerBar.Text:ClearAllPoints()
 		self.AltPowerBar.Text:SetPoint("CENTER", self.AltPowerBar, "CENTER", module.db.Player.Texts.AltPower.X, module.db.Player.Texts.AltPower.Y)
@@ -2352,7 +2360,7 @@ module.funcs = {
 
 			local bg = DruidMana:CreateTexture(nil, "BACKGROUND")
 			bg:SetAllPoints(DruidMana)
-			
+
 			self.DruidMana = DruidMana
 			self.DruidMana.bg = bg
 
@@ -2360,7 +2368,7 @@ module.funcs = {
 
 			self.DruidMana.value = SetFontString(self.DruidMana, Media:Fetch("font", oufdb.Texts.DruidMana.Font), oufdb.Texts.DruidMana.Size, oufdb.Texts.DruidMana.Outline)
 			self:Tag(self.DruidMana.value, "[druidmana2]")
-			
+
 			self.DruidMana.ShouldEnable = function(unit)
 				local shouldEnable = false
 				local _, playerClass = UnitClass(unit)
@@ -2374,7 +2382,7 @@ module.funcs = {
 				end
 				return shouldEnable
 			end
-			
+
 			self.DruidMana.SetPosition = function()
 				if not oufdb.Bars.DruidMana.OverPower then return self.Power:SetHeight(oufdb.Bars.Power.Height) end
 
@@ -2670,7 +2678,7 @@ module.funcs = {
 			end
 
 			castbar.Icon = castbar:CreateTexture(nil, "ARTWORK")
-			castbar.Icon:SetTexCoord(0, 1, 0, 1) 
+			castbar.Icon:SetTexCoord(0, 1, 0, 1)
 			if unit == "player" or unit == "target" or unit == "focus" or unit == "pet" then
 				castbar.Icon:SetHeight(28.5)
 				castbar.Icon:SetWidth(28.5)
@@ -2885,7 +2893,7 @@ module.funcs = {
 		end
 
 		self.TotalAbsorb.maxOverflow = 1
-		
+
 		self.TotalAbsorb:SetWidth(oufdb.Bars.Health.Width * self:GetWidth() / oufdb.Width) -- needed for 25/40 man raid width downscaling!
 		self.TotalAbsorb:SetStatusBarTexture(Media:Fetch("statusbar", oufdb.Bars.TotalAbsorb.Texture))
 		self.TotalAbsorb:SetStatusBarColor(oufdb.Bars.TotalAbsorb.MyColor.r, oufdb.Bars.TotalAbsorb.MyColor.g, oufdb.Bars.TotalAbsorb.MyColor.b, oufdb.Bars.TotalAbsorb.MyColor.a)
@@ -2896,7 +2904,7 @@ module.funcs = {
 
 		--self.TotalAbsorb.Override = TotalAbsorbOverride
 	end,
-	
+
 	V2Textures = function(from, to)
 		if not from.V2Tex then
 			local V2Tex = CreateFrame("Frame", nil, from)
@@ -3092,7 +3100,7 @@ local SetStyle = function(self, unit, isSingle)
 	if unit == "player" then
 		if ouf_xp_rep.Experience.Enable then module.funcs.Experience(self, unit, ouf_xp_rep) end
 		if ouf_xp_rep.Reputation.Enable then module.funcs.Reputation(self, unit, ouf_xp_rep) end
-		
+
 		if class == "DEATH KNIGHT" or class == "DEATHKNIGHT" then
 			if oufdb.Bars.Runes.Enable then
 				module.funcs.Runes(self, unit, oufdb)
@@ -3111,13 +3119,13 @@ local SetStyle = function(self, unit, isSingle)
 			if oufdb.Bars.DruidMana.Enable then module.funcs.DruidMana(self, unit, oufdb) end
 		elseif class == "MAGE" then
 			if oufdb.Bars.ArcaneCharges.Enable then module.funcs.ClassIcons(self, unit, oufdb) end
-		elseif class == "WARLOCK" then 
+		elseif class == "WARLOCK" then
 			if oufdb.Bars.WarlockBar.Enable then module.funcs.ClassIcons(self, unit, oufdb) end
-		elseif class == "PRIEST" then 
+		elseif class == "PRIEST" then
 			if oufdb.Bars.DruidMana.Enable then module.funcs.DruidMana(self, unit, oufdb) end
 		end
 	end
-	
+
 	------------------------------------------------------------------------
 	--	Raid Specific Items
 	------------------------------------------------------------------------
@@ -3126,11 +3134,11 @@ local SetStyle = function(self, unit, isSingle)
 		if oufdb.CornerAura.Enable then module.funcs.SingleAuras(self, unit, oufdb) end
 		if oufdb.RaidDebuff.Enable then module.funcs.RaidDebuffs(self, unit, oufdb) end
 	end
-	
+
 	------------------------------------------------------------------------
 	--	Other
 	------------------------------------------------------------------------
-	
+
 	if oufdb.Portrait.Enable then module.funcs.Portrait(self, unit, oufdb) end
 
 	if unit == "player" or unit == "pet" then

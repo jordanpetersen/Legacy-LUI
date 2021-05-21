@@ -2,7 +2,7 @@
 	Project....: LUI NextGenWoWUserInterface
 	File.......: party.lua
 	Description: oUF Party Defaults
-]] 
+]]
 
 local addonname, LUI = ...
 local module = LUI:Module("Unitframes")
@@ -318,6 +318,13 @@ module.defaults.profile.Party = {
 			X = -12,
 			Y = 10,
 			Point = "TOPLEFT",
+		},
+		PhaseIcon = {
+			Enable = false,
+			Size = 35,
+			X = -10,
+			Y = -10,
+			Point = "BOTTOMLEFT",
 		},
 	},
 	Texts = {
