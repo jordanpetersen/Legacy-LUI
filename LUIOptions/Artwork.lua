@@ -177,13 +177,13 @@ local function CreateNewPanel(info)
 end
 
 --- Create the options for the Sidebar.
----@param name string
+---@param name string # SideBars DB key (e.g. Right1)
 ---@param bar SidebarMixin
 ---@param barDB SidebarDBOptions
 ---@return LUIOption
 local function CreateSidebarOptions(name, bar, barDB)
 	local function IsSideBarDisabled() return not barDB.Enable end
-	
+
 	local function presetDropdownGet(info)
 		return barDB.Anchor
 	end
@@ -198,28 +198,27 @@ local function CreateSidebarOptions(name, bar, barDB)
 		bar:AutoAdjust()
 	end
 
-	local dbName = "Sidebar"..string.gsub(name, " Sidebar", "")
-	local barColorDB = module.db.profile.Colors[dbName]
+	local side = barDB.Side or bar.side or "Right"
+	local colorKey = "Sidebar"..side
+	local displayName = name:gsub("(%a+)(%d+)", "%1 %2").." Sidebar"
 
-	return Opt:Group({name = name, db = barDB, arg = bar, args = {
-		Header = Opt:Header({name = name}),
+	return Opt:Group({name = displayName, db = barDB, arg = bar, args = {
+		Header = Opt:Header({name = displayName}),
 		Enable = Opt:Toggle({name = "Enabled"}),
 		OpenInstant = Opt:Toggle({name = "Open Instantly", desc = "If enabled, there will be no delay or animation when opening or closing the sidebar.\n\nNote: During combat, the sidebar always open instantly.", disabled = IsSideBarDisabled}),
 		Spacer = Opt:Spacer({}),
 		Scale = Opt:Slider({name = "Scale", desc = format("The scale of the sidebar. For best results, this should match the Pixel-To-UI factor.\n\nFor your resolution: %.f%%", PixelUtil.GetPixelToUIUnitFactor()*100), values = Opt.ScaleValues, disabled = IsSideBarDisabled}),
-		Y = Opt:InputNumber({name = "Y Offset", desc = "Vertical position of the sidebar.", disabled = IsSideBarDisabled}),
+		Y = Opt:InputNumber({name = "Y Offset", desc = "Vertical position of the sidebar. Use different Y values to stack multiple sidebars on the same edge.", disabled = IsSideBarDisabled}),
 		SpacerAnchor = Opt:Spacer({}),
-		Intro = Opt:Desc({name = "\nWhich Bar do you want to use for this Sidebar?\nChoose one or type in the frame to be anchored manually.\n\nFor Bartender4 Auto-Adjust, use a vertical bar (12 buttons / 6 rows). Dominos presets are supported as anchors only.", disabled = IsSideBarDisabled}),
+		Intro = Opt:Desc({name = "\nWhich Bar do you want to use for this Sidebar?\nChoose one or type in the frame to be anchored manually.\n\nFor Bartender4 Auto-Adjust, use a vertical bar (12 buttons / 6 rows). Each sidebar needs its own bar. Dominos presets are supported as anchors only.", disabled = IsSideBarDisabled}),
 		AnchorPreset = Opt:Select({name = "Bar Preset", values = PRESET_BAR_ANCHORS, get = presetDropdownGet, set = presetDropdownSet, disabled = IsSideBarDisabled}),
 		Anchor = Opt:Input({name = "Anchor", desc = "Frame that will be anchored to the sidebar", disabled = IsSideBarDisabled}),
 		SpacerAdjust = Opt:Spacer({}),
-		AutoAdjust = Opt:Execute({name = "Auto-Adjust Position", desc = "If you recently changed the bar anchor, make sure to move the previous bar outside of the Sidebar to prevent overlaps.", func = autoAdjustFunc, disabled = IsSideBarDisabled}),
-		AutoPosition = Opt:Toggle({name = "Auto-Position", desc = "If enabled, LUI will automatically position the sidebar anchor. This option automatically turns off if you change the anchor to avoid errors.", disabled = IsSideBarDisabled}),
+		AutoAdjust = Opt:Execute({name = "Auto-Adjust Position", desc = "If you recently changed the bar anchor, make sure to move the previous bar outside of the Sidebar to prevent overlaps. Bartender4 only.", func = autoAdjustFunc, disabled = IsSideBarDisabled}),
+		AutoPosition = Opt:Toggle({name = "Auto-Position", desc = "If enabled, LUI will automatically position the sidebar anchor on refresh. Turns off if you change the anchor.", disabled = IsSideBarDisabled}),
 		SpacerColor = Opt:Spacer({}),
-		ColorType = Opt:ColorSelect({name = "Sidebar Texture Color", arg = dbName}),
-		[(dbName)] = Opt:Color({name = "Individual Color", hasAlpha = true}),
-		---@TODO: Point will only be there for additional sidebars.
-		--Point = Opt:Select({name = "Anchor Point that the sidebar will be tied to.", values = LUI.Points}),
+		ColorType = Opt:ColorSelect({name = "Sidebar Texture Color", desc = "Shared by all sidebars on the "..side.." edge.", arg = colorKey}),
+		[(colorKey)] = Opt:Color({name = "Individual Color", hasAlpha = true}),
 	}})
 end
 
@@ -307,7 +306,7 @@ CustomArgs = {
 }
 
 for name, sidebar in module:IterateSidebars() do
-	BuiltinArgs[name] = CreateSidebarOptions(name.." Sidebar", sidebar, db.SideBars[name])
+	BuiltinArgs[name] = CreateSidebarOptions(name, sidebar, db.SideBars[name])
 end
 
 Artwork.args = {

@@ -99,8 +99,10 @@ module.defaults = {
 		},
 		SideBars = {
 			---@class (exact) SidebarDBOptions
-			Right = {
+			---@field Side string
+			Right1 = {
 				Enable = true,
+				Side = "Right",
 				OpenInstant = false,
 				Offset = 0,
 				IsOpen = false,
@@ -113,8 +115,24 @@ module.defaults = {
 				Scale = 1,
 				Point = "RIGHT",
 			},
-			Left = {
+			Right2 = {
+				Enable = false,
+				Side = "Right",
+				OpenInstant = false,
+				Offset = 0,
+				IsOpen = false,
+				Anchor = "BT4Bar8",
+				Additional = "",
+				AutoPosition = false,
+				HideEmpty = true,
+				X = 15,
+				Y = 200,
+				Scale = 1,
+				Point = "RIGHT",
+			},
+			Left1 = {
 				Enable = true,
+				Side = "Left",
 				OpenInstant = false,
 				Offset = 0,
 				IsOpen = false,
@@ -124,6 +142,21 @@ module.defaults = {
 				HideEmpty = true,
 				X = 15,
 				Y = 0,
+				Scale = 1,
+				Point = "LEFT",
+			},
+			Left2 = {
+				Enable = false,
+				Side = "Left",
+				OpenInstant = false,
+				Offset = 0,
+				IsOpen = false,
+				Anchor = "BT4Bar7",
+				Additional = "",
+				AutoPosition = false,
+				HideEmpty = true,
+				X = 15,
+				Y = 200,
 				Scale = 1,
 				Point = "LEFT",
 			},
@@ -189,8 +222,7 @@ end
 function module:OnEnable()
 	module:setPanels()
 	module:setMainPanels()
-	local bar = module:CreateNewSideBar("Right", "Right")
-	--local bar2 = module:CreateNewSideBar("Left", "Left")
+	module:CreateConfiguredSideBars()
 	module:CreateOrb()
 	module:CreateNavBar()
 end

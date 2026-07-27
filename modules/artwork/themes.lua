@@ -1121,7 +1121,7 @@ function module:LoadOptions()
 				},
 				sidebar = {
 					name = "Sidebar Color",
-					desc = "Color for the Artwork sidebar chrome (writes Artwork SidebarRight).",
+					desc = "Color for Artwork sidebar chrome on the Right edge (SidebarRight). Left edge uses Artwork SidebarLeft.",
 					type = "color",
 					width = "full",
 					hasAlpha = true,
