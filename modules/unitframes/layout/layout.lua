@@ -28,8 +28,10 @@ local UnitClass, UnitLevel, GetPVPTimer = _G.UnitClass, _G.UnitLevel, _G.GetPVPT
 local GetShapeshiftFormID, GetTotemInfo = _G.GetShapeshiftFormID, _G.GetTotemInfo
 local UnitSpellHaste, UnitChannelInfo = _G.UnitSpellHaste, _G.UnitChannelInfo
 local DebuffTypeColor =  _G.DebuffTypeColor
+local issecretvalue = _G.issecretvalue
 local format = string.format
 local floor = math.floor
+local pcall = _G.pcall
 
 local ALT_POWER_BAR_PAIR_DISPLAY_INFO = _G.ALT_POWER_BAR_PAIR_DISPLAY_INFO
 local ADDITIONAL_POWER_BAR_INDEX = _G.ADDITIONAL_POWER_BAR_INDEX
@@ -267,28 +269,43 @@ local function OverrideHealth(self, event, unit, powerType)
 	if self.unit ~= unit then return end
 	local health = self.Health
 
-	local current = UnitHealth(unit)
-	local max = UnitHealthMax(unit)
-	local disconnected = not UnitIsConnected(unit)
+	local rawCurrent = UnitHealth(unit)
+	local rawMax = UnitHealthMax(unit)
+	local current = LUI:SecretSafe(rawCurrent, health._lastCurrent)
+	local max = LUI:SecretSafe(rawMax, health._lastMax or 1)
+	if current ~= nil and not (issecretvalue and issecretvalue(rawCurrent)) then
+		health._lastCurrent = current
+	end
+	if max ~= nil and not (issecretvalue and issecretvalue(rawMax)) then
+		health._lastMax = max
+	end
+	current = current or 0
+	max = max or 1
+
+	local unitConnected = UnitIsConnected(unit)
+	local disconnected = not LUI:SecretSafe(unitConnected, true)
 
 	health:SetMinMaxValues(0, max)
-
-	health:SetValue(disconnected and max or current)
+	if not (issecretvalue and issecretvalue(rawCurrent)) and not (issecretvalue and issecretvalue(rawMax)) then
+		health:SetValue(disconnected and max or current)
+	end
 
 	health.disconnected = disconnected
 
 	local _, pToken = UnitClass(unit)
-	local color = {LUI:GetClassColor(pToken)}
+	pToken = LUI:SecretSafe(pToken, nil)
+	local color = pToken and {LUI:GetClassColor(pToken)} or {0.5, 0.5, 0.5}
 	local gradientColor = UnitHealthPercent(unit, true, self.colors.health:GetCurve()) --[[@as ColorMixin]]
 	local healthColorTex = health:GetStatusBarTexture()
 	local r, g, b = health.colorIndividual.r, health.colorIndividual.g, health.colorIndividual.b
 
 	if health.color == "By Class" then
-		if UnitIsPlayer(unit) then
+		local isPlayer = LUI:SecretSafe(UnitIsPlayer(unit), false)
+		if isPlayer then
 			r, g, b = unpack(color)
 			healthColorTex:SetVertexColor(r, g, b)
 		else
-			local reaction = UnitReaction("player", unit)
+			local reaction = LUI:SecretSafe(UnitReaction("player", unit), 4)
 			if reaction and reaction < 4 then
 				r, g, b = unpack(module.db.profile.Colors.Misc["Hostile"])
 				healthColorTex:SetVertexColor(r, g, b)
@@ -303,10 +320,16 @@ local function OverrideHealth(self, event, unit, powerType)
 	elseif health.color == "Individual" then
 		healthColorTex:SetVertexColor(r, g, b)
 	else
-		healthColorTex:SetVertexColor(gradientColor:GetRGB())
+		r, g, b = LUI:SecretSafeColorRGB(gradientColor, r, g, b)
+		healthColorTex:SetVertexColor(r, g, b)
 	end
 
-	if health.colorTapping and UnitIsTapDenied and UnitIsTapDenied(unit) then healthColorTex:SetVertexColor(unpack(module.db.profile.Colors.Misc["Tapped"])) end
+	local tapped = health.colorTapping and UnitIsTapDenied and LUI:SecretSafe(UnitIsTapDenied(unit), false)
+	if tapped then healthColorTex:SetVertexColor(unpack(module.db.profile.Colors.Misc["Tapped"])) end
+
+	r = LUI:SecretSafe(r, 0.5)
+	g = LUI:SecretSafe(g, 0.5)
+	b = LUI:SecretSafe(b, 0.5)
 
 	local mu = health.bg.multiplier or 1
 
@@ -316,10 +339,10 @@ local function OverrideHealth(self, event, unit, powerType)
 		health.bg:SetVertexColor(r*mu, g*mu, b*mu)
 	end
 
-	local unitConnected = UnitIsConnected(unit)
 	local unitGhost = UnitIsGhost(unit)
 	local unitDead = UnitIsDead(unit)
 	local unitAFK = UnitIsAFK(unit)
+	local valuesSecret = (issecretvalue and issecretvalue(rawCurrent)) or (issecretvalue and issecretvalue(rawMax))
 
 	if not issecretvalue(unitConnected) and not unitConnected then
 		health:SetValue(0)
@@ -336,13 +359,20 @@ local function OverrideHealth(self, event, unit, powerType)
 		health.value:SetText(health.value.ShowDead and "|cffD7BEA5<Dead>|r" or "")
 		health.valuePercent:SetText(health.valuePercent.ShowDead and "|cffD7BEA5<Dead>|r" or "")
 		health.valueMissing:SetText("")
+	elseif valuesSecret then
+		-- Keep last safe bar value; clear text that would format secret numbers.
+		health.value:SetText("")
+		health.valuePercent:SetText("")
+		health.valueMissing:SetText("")
 	else
 		local healthPercent = UnitHealthPercent(unit, false, PercentCurve)
 		local notFullAlpha = UnitHealthPercent(unit, true, NotFullCurve)
+		healthPercent = LUI:SecretSafe(healthPercent, 0)
+		notFullAlpha = LUI:SecretSafe(notFullAlpha, 1)
 
 		-- Raid Name Text, if health is not full, hide it
 		if self.Info.OnlyWhenFull then
-			local fullHealthAlpha = UnitHealthPercent(unit, false, IsFullCurve)
+			local fullHealthAlpha = LUI:SecretSafe(UnitHealthPercent(unit, false, IsFullCurve), 1)
 			self.Info:SetAlpha(fullHealthAlpha)
 		else
 			self.Info:SetAlpha(1)
@@ -374,7 +404,8 @@ local function OverrideHealth(self, event, unit, powerType)
 			elseif health.value.color == "Individual" then
 				health.value:SetTextColor(health.value.colorIndividual.r, health.value.colorIndividual.g, health.value.colorIndividual.b)
 			else
-				health.value:SetTextColor(gradientColor.r, gradientColor.g, gradientColor.b)
+				local gr, gg, gb = LUI:SecretSafeColorRGB(gradientColor, 1, 1, 1)
+				health.value:SetTextColor(gr, gg, gb)
 			end
 
 			if health.value.ShowAlways then
@@ -394,7 +425,8 @@ local function OverrideHealth(self, event, unit, powerType)
 			elseif health.valuePercent.color == "Individual" then
 				health.valuePercent:SetTextColor(health.valuePercent.colorIndividual.r, health.valuePercent.colorIndividual.g, health.valuePercent.colorIndividual.b)
 			else
-				health.valuePercent:SetTextColor(gradientColor.r, gradientColor.g, gradientColor.b)
+				local gr, gg, gb = LUI:SecretSafeColorRGB(gradientColor, 1, 1, 1)
+				health.valuePercent:SetTextColor(gr, gg, gb)
 			end
 
 			if health.valuePercent.ShowAlways then
@@ -407,9 +439,11 @@ local function OverrideHealth(self, event, unit, powerType)
 		end
 
 		if health.valueMissing.Enable == true then
-			local healthMissing = UnitHealthMissing(unit)
+			local healthMissing = LUI:SecretSafe(UnitHealthMissing(unit), nil)
 
-			if health.valueMissing.ShortValue == true then
+			if healthMissing == nil then
+				health.valueMissing:SetText("")
+			elseif health.valueMissing.ShortValue == true then
 				health.valueMissing:SetFormattedText("-%s", AbbreviateNumbers(healthMissing))
 			else
 				health.valueMissing:SetFormattedText("-%s", healthMissing)
@@ -420,7 +454,8 @@ local function OverrideHealth(self, event, unit, powerType)
 			elseif health.valueMissing.color == "Individual" then
 				health.valueMissing:SetTextColor(health.valueMissing.colorIndividual.r, health.valueMissing.colorIndividual.g, health.valueMissing.colorIndividual.b)
 			else
-				health.valueMissing:SetTextColor(gradientColor.r, gradientColor.g, gradientColor.b)
+				local gr, gg, gb = LUI:SecretSafeColorRGB(gradientColor, 1, 1, 1)
+				health.valueMissing:SetTextColor(gr, gg, gb)
 			end
 
 			if health.valueMissing.ShowAlways then
@@ -461,20 +496,35 @@ local function OverridePower(self, event, unit)
 	local power = self.Power
 
 	local displayType = GetDisplayPower(power, unit)
-	local current = UnitPower(unit, displayType)
-	local max = UnitPowerMax(unit, displayType)
-	local disconnected = not UnitIsConnected(unit)
+	local rawCurrent = UnitPower(unit, displayType)
+	local rawMax = UnitPowerMax(unit, displayType)
+	local current = LUI:SecretSafe(rawCurrent, power._lastCurrent)
+	local max = LUI:SecretSafe(rawMax, power._lastMax or 1)
+	if current ~= nil and not (issecretvalue and issecretvalue(rawCurrent)) then
+		power._lastCurrent = current
+	end
+	if max ~= nil and not (issecretvalue and issecretvalue(rawMax)) then
+		power._lastMax = max
+	end
+	current = current or 0
+	max = max or 1
+
+	local disconnected = not LUI:SecretSafe(UnitIsConnected(unit), true)
 
 	power:SetMinMaxValues(0, max)
-
-	power:SetValue(disconnected and max or current)
+	if not (issecretvalue and issecretvalue(rawCurrent)) and not (issecretvalue and issecretvalue(rawMax)) then
+		power:SetValue(disconnected and max or current)
+	end
 
 	power.disconnected = disconnected
 
 	local pType, pName = UnitPowerType(unit)
+	pType = LUI:SecretSafe(pType, displayType)
+	pName = LUI:SecretSafe(pName, nil)
 	local pClass, pToken = UnitClass(unit)
-	local color = {LUI:GetClassColor(pToken)}
-	local color2 = {LUI:GetFallbackRGB(pName)}
+	pToken = LUI:SecretSafe(pToken, nil)
+	local color = pToken and {LUI:GetClassColor(pToken)} or {0.5, 0.5, 0.5}
+	local color2 = pName and {LUI:GetFallbackRGB(pName)} or {}
 	if color and not next(color2) then color2 = color end
 	local powerColorTex = power:GetStatusBarTexture()
 
@@ -491,6 +541,10 @@ local function OverridePower(self, event, unit)
 		powerColorTex:SetVertexColor(r, g, b)
 	end
 
+	r = LUI:SecretSafe(r, 0.5)
+	g = LUI:SecretSafe(g, 0.5)
+	b = LUI:SecretSafe(b, 0.5)
+
 	local mu = power.bg.multiplier or 1
 
 	if power.bg.invert == true then
@@ -498,6 +552,8 @@ local function OverridePower(self, event, unit)
 	else
 		power.bg:SetVertexColor(r*mu, g*mu, b*mu)
 	end
+
+	local valuesSecret = (issecretvalue and issecretvalue(rawCurrent)) or (issecretvalue and issecretvalue(rawMax))
 
 	if not issecretvalue(UnitIsConnected(unit)) and not UnitIsConnected(unit) then
 		power:SetValue(0)
@@ -514,8 +570,12 @@ local function OverridePower(self, event, unit)
 		power.valueMissing:SetText("")
 		power.valuePercent:SetText("")
 		power.value:SetText("")
+	elseif valuesSecret then
+		power.valueMissing:SetText("")
+		power.valuePercent:SetText("")
+		power.value:SetText("")
 	else
-		local powerPercent = UnitPowerPercent(unit, pType, false, PercentCurve)
+		local powerPercent = LUI:SecretSafe(UnitPowerPercent(unit, pType, false, PercentCurve), 0)
 	
 		if power.value.Enable == true then
 			if power.value.Format == "Absolut" then
@@ -553,7 +613,7 @@ local function OverridePower(self, event, unit)
 			powerCurve:AddPoint(0.999, 1)
 			powerCurve:AddPoint(1, power.value.ShowFull and 1 or 0)
 			
-			local powerAlpha = UnitPowerPercent(unit, pType, false, powerCurve)
+			local powerAlpha = LUI:SecretSafe(UnitPowerPercent(unit, pType, false, powerCurve), 1)
 			power.value:SetAlpha(powerAlpha)
 		else
 			power.value:SetText("")
@@ -577,16 +637,18 @@ local function OverridePower(self, event, unit)
 			powerCurve:AddPoint(0.999, 1)
 			powerCurve:AddPoint(1, power.valuePercent.ShowFull and 1 or 0)
 			
-			local powerAlpha = UnitPowerPercent(unit, pType, false, powerCurve)
+			local powerAlpha = LUI:SecretSafe(UnitPowerPercent(unit, pType, false, powerCurve), 1)
 			power.valuePercent:SetAlpha(powerAlpha)
 		else
 			power.valuePercent:SetText("")
 		end
 
 		if power.valueMissing.Enable == true then
-			local powerMissing = UnitPowerMissing(unit, pType)
+			local powerMissing = LUI:SecretSafe(UnitPowerMissing(unit, pType), nil)
 
-			if power.valueMissing.ShortValue == true then
+			if powerMissing == nil then
+				power.valueMissing:SetText("")
+			elseif power.valueMissing.ShortValue == true then
 				power.valueMissing:SetFormattedText("-%s", AbbreviateNumbers(powerMissing))
 			else
 				power.valueMissing:SetFormattedText("-%d", powerMissing)
@@ -607,7 +669,7 @@ local function OverridePower(self, event, unit)
 			powerCurve:AddPoint(0.999, 1)
 			powerCurve:AddPoint(1, power.valueMissing.ShowFull and 1 or 0)
 			
-			local powerAlpha = UnitPowerPercent(unit, pType, false, powerCurve)
+			local powerAlpha = LUI:SecretSafe(UnitPowerPercent(unit, pType, false, powerCurve), 1)
 			power.valueMissing:SetAlpha(powerAlpha)
 		else
 			power.valueMissing:SetText("")
@@ -901,15 +963,14 @@ local function TotemsOverride(self, event, slot)
 	local haveTotem, name, startTime, duration, totemIcon = GetTotemInfo(slot)
 
 	local color = module.colors.totems[slot]
-	totem:GetStatusBarTexture():SetVertexColor(unpack(color))
+	local r, g, b = unpack(color)
+	totem:GetStatusBarTexture():SetVertexColor(r, g, b)
 	totem:SetValue(0)
 
-	-- Multipliers
+	-- Multipliers (use known color — avoid GetStatusBarColor which can be secret)
 	if (totem.bg.multiplier) then
 		local mu = totem.bg.multiplier
-		local r, g, b = totem:GetStatusBarColor()
-		r, g, b = r*mu, g*mu, b*mu
-		totem.bg:SetVertexColor(r, g, b)
+		totem.bg:SetVertexColor(r*mu, g*mu, b*mu)
 	end
 
 	if(haveTotem) then
@@ -1010,13 +1071,17 @@ local function PostUpdateAlternativePower(altpowerbar, unit, cur, min, max)
 
 	if altpowerbar.color == "By Class" then
 		altpowerbar:GetStatusBarTexture():SetVertexColor(unpack(color))
+		r, g, b = unpack(color)
 	elseif altpowerbar.color == "Individual" then
-		altpowerbar:GetStatusBarTexture():SetVertexColor(altpowerbar.colorIndividual.r, altpowerbar.colorIndividual.g, altpowerbar.colorIndividual.b)
+		r, g, b = altpowerbar.colorIndividual.r, altpowerbar.colorIndividual.g, altpowerbar.colorIndividual.b
+		altpowerbar:GetStatusBarTexture():SetVertexColor(r, g, b)
 	else
+		r = LUI:SecretSafe(r, 1)
+		g = LUI:SecretSafe(g, 1)
+		b = LUI:SecretSafe(b, 1)
 		altpowerbar:GetStatusBarTexture():SetVertexColor(r, g, b)
 	end
 
-	local r, g, b = altpowerbar:GetStatusBarColor()
 	local mu = altpowerbar.bg.multiplier or 1
 	altpowerbar.bg:SetVertexColor(r*mu, g*mu, b*mu)
 
@@ -1048,19 +1113,25 @@ end
 
 local function PostUpdateAdditionalPower(additionalpower, unit, cur, max)
 	local _, class = UnitClass(unit)
-	if additionalpower.color == "By Class" then
-		additionalpower:GetStatusBarTexture():SetVertexColor(LUI:GetClassColor(class))
+	class = LUI:SecretSafe(class, nil)
+	local r, g, b
+	if additionalpower.color == "By Class" and class then
+		r, g, b = LUI:GetClassColor(class)
+		additionalpower:GetStatusBarTexture():SetVertexColor(r, g, b)
 	elseif additionalpower.color == "By Type" then
-		additionalpower:GetStatusBarTexture():SetVertexColor(unpack(module.colors.power.MANA))
+		r, g, b = unpack(module.colors.power.MANA)
+		additionalpower:GetStatusBarTexture():SetVertexColor(r, g, b)
 	else
-		additionalpower:GetStatusBarTexture():SetVertexColor(oUF.ColorGradient(cur, max, module.colors.smooth()))
+		local safeCur = LUI:SecretSafe(cur, 0)
+		local safeMax = LUI:SecretSafe(max, 1)
+		r, g, b = oUF.ColorGradient(safeCur, safeMax, module.colors.smooth())
+		additionalpower:GetStatusBarTexture():SetVertexColor(r, g, b)
 	end
 
 	local bg = additionalpower.bg
 
-	if bg then
+	if bg and r then
 		local mu = bg.multiplier or 1
-		local r, g, b = additionalpower:GetStatusBarColor()
 		bg:SetVertexColor(r * mu, g * mu, b * mu)
 	end
 end
@@ -1100,32 +1171,71 @@ local function ArenaEnemyUnseen(self, event, unit, state)
 end
 
 local function PortraitOverride(self, event, unit)
-	if not unit or not UnitIsUnit(self.unit, unit) then return end
+	-- UnitIsUnit can error when tokens are secret; match oUF's Private.unitIsUnit approach.
+	local okCompare, isSame = pcall(UnitIsUnit, self.unit, unit)
+	if not unit or not okCompare or not isSame then return end
 
 	local portrait = self.Portrait
+	local portrait2D = self.Portrait2D
+	local guid = LUI:SecretSafe(UnitGUID(unit), nil)
 
-	if(portrait:IsObjectType"Model") then
-		local guid = UnitGUID(unit)
-		if not UnitExists(unit) or not UnitIsConnected(unit) or not UnitIsVisible(unit) then
-			portrait:SetModelScale(4.25)
-			portrait:SetPosition(0, 0, -1.5)
-			portrait:SetModel("Interface\\Buttons\\talktomequestionmark.mdx")
+	local function use2D()
+		if portrait then
+			portrait:Hide()
 			portrait.guid = nil
-		elseif(portrait.guid ~= guid or event == "UNIT_MODEL_CHANGED") then
-			portrait:SetUnit(unit)
-			portrait:SetCamera(portrait:GetModel() == "character\\worgen\\male\\worgenmale.m2" and 1 or 0)
-
-			portrait.guid = guid
-		else
-			portrait:SetCamera(portrait:GetModel() == "character\\worgen\\male\\worgenmale.m2" and 1 or 0)
 		end
-	else
-		SetPortraitTexture(portrait, unit)
+		if not portrait2D then return end
+		portrait2D:Show()
+		local ok = pcall(SetPortraitTexture, portrait2D, unit)
+		if not ok then
+			portrait2D:SetTexture([[Interface\Icons\INV_Misc_QuestionMark]])
+		end
 	end
 
-	local a = portrait:GetAlpha()
-	portrait:SetAlpha(0)
-	portrait:SetAlpha(a)
+	local function use3DUnavailable()
+		if portrait2D then portrait2D:Hide() end
+		if not portrait then return end
+		portrait:Show()
+		portrait:SetCamDistanceScale(0.25)
+		portrait:SetPortraitZoom(0)
+		portrait:SetPosition(0, 0, 0.25)
+		portrait:ClearModel()
+		portrait:SetModel([[Interface\Buttons\TalkToMeQuestionMark.m2]])
+		portrait.guid = nil
+	end
+
+	local function use3D()
+		if portrait2D then portrait2D:Hide() end
+		if not portrait then return end
+		portrait:Show()
+		portrait:SetCamDistanceScale(1)
+		portrait:SetPortraitZoom(1)
+		portrait:SetPosition(0, 0, 0)
+		portrait:ClearModel()
+		local ok = pcall(portrait.SetUnit, portrait, unit)
+		if not ok then
+			use2D()
+			return
+		end
+		portrait.guid = guid
+	end
+
+	if LUI:CanUseUnitInfo(unit) then
+		if portrait.guid ~= guid or event == "UNIT_MODEL_CHANGED" or event == "ForceUpdate" then
+			use3D()
+		end
+	elseif UnitExists(unit) then
+		-- Prefer 2D when 3D unit/GUID/model info is blocked
+		use2D()
+	else
+		use3DUnavailable()
+	end
+
+	if portrait and portrait:IsShown() then
+		local a = portrait:GetAlpha()
+		portrait:SetAlpha(0)
+		portrait:SetAlpha(a)
+	end
 end
 
 local function Reposition(V2Tex)
@@ -2095,7 +2205,12 @@ module.funcs = {
 		if not self.Portrait then
 			self.Portrait = CreateFrame("PlayerModel", nil, self)
 			self.Portrait:SetFrameLevel(5)
-			--self.Portrait.Override = PortraitOverride
+			self.Portrait.Override = PortraitOverride
+		end
+
+		if not self.Portrait2D then
+			self.Portrait2D = self:CreateTexture(nil, "ARTWORK", nil, 1)
+			self.Portrait2D:Hide()
 		end
 
 		self.Portrait:SetHeight(oufdb.Portrait.Height)
@@ -2103,6 +2218,12 @@ module.funcs = {
 		self.Portrait:SetAlpha(oufdb.Portrait.Alpha)
 		self.Portrait:ClearAllPoints()
 		self.Portrait:SetPoint("TOPLEFT", self, "TOPLEFT", oufdb.Portrait.X * self:GetWidth() / oufdb.Width, oufdb.Portrait.Y) -- needed for 25/40 man raid width downscaling!
+
+		self.Portrait2D:SetHeight(oufdb.Portrait.Height)
+		self.Portrait2D:SetWidth(oufdb.Portrait.Width * self:GetWidth() / oufdb.Width)
+		self.Portrait2D:SetAlpha(oufdb.Portrait.Alpha)
+		self.Portrait2D:ClearAllPoints()
+		self.Portrait2D:SetPoint("TOPLEFT", self, "TOPLEFT", oufdb.Portrait.X * self:GetWidth() / oufdb.Width, oufdb.Portrait.Y)
 	end,
 
 	Buffs = function(self, unit, oufdb)
@@ -2391,8 +2512,7 @@ module.funcs = {
 		end
 
 		if unit == "player" then
-			-- HACK: Disable Latency until properly re-implemented
-			if oufdb.Castbar.General.Latency == true and false then
+			if oufdb.Castbar.General.Latency == true then
 				castbar.SafeZone:Show()
 				if oufdb.Castbar.General.IndividualColor == true then
 					castbar.SafeZone:SetVertexColor(oufdb.Castbar.Colors.Latency.r,oufdb.Castbar.Colors.Latency.g,oufdb.Castbar.Colors.Latency.b,oufdb.Castbar.Colors.Latency.a)

@@ -247,27 +247,38 @@ local function CastStart(self, event, unit)
 	local safeZone = element.SafeZone
 	if(safeZone and unit == 'player') then
 		local isHoriz = element:GetOrientation() == 'HORIZONTAL'
+		local latency = select(4, GetNetStats())
+		local castLength = endTime - startTime
 
-		safeZone:ClearAllPoints()
-		safeZone:SetPoint(isHoriz and 'TOP' or 'LEFT')
-		safeZone:SetPoint(isHoriz and 'BOTTOM' or 'RIGHT')
-
-		if(element.channeling) then
-			safeZone:SetPoint(element:GetReverseFill() and (isHoriz and 'RIGHT' or 'TOP') or (isHoriz and 'LEFT' or 'BOTTOM'))
+		-- Only size SafeZone from non-secret duration / latency math
+		if issecretvalue(latency) or issecretvalue(castLength) or issecretvalue(endTime) or issecretvalue(startTime) then
+			safeZone:Hide()
+		elseif not castLength or castLength <= 0 then
+			safeZone:Hide()
 		else
-			safeZone:SetPoint(element:GetReverseFill() and (isHoriz and 'LEFT' or 'BOTTOM') or (isHoriz and 'RIGHT' or 'TOP'))
-		end
+			safeZone:Show()
+			safeZone:ClearAllPoints()
+			safeZone:SetPoint(isHoriz and 'TOP' or 'LEFT')
+			safeZone:SetPoint(isHoriz and 'BOTTOM' or 'RIGHT')
 
-		if(element.empowering) then
-			endTime = endTime + GetUnitEmpowerHoldAtMaxTime(unit)
-		end
+			if(element.channeling) then
+				safeZone:SetPoint(element:GetReverseFill() and (isHoriz and 'RIGHT' or 'TOP') or (isHoriz and 'LEFT' or 'BOTTOM'))
+			else
+				safeZone:SetPoint(element:GetReverseFill() and (isHoriz and 'LEFT' or 'BOTTOM') or (isHoriz and 'RIGHT' or 'TOP'))
+			end
 
-		local ratio = (select(4, GetNetStats())) / (endTime - startTime)
-		if(ratio > 1) then
-			ratio = 1
-		end
+			if(element.empowering) then
+				endTime = endTime + GetUnitEmpowerHoldAtMaxTime(unit)
+				castLength = endTime - startTime
+			end
 
-		safeZone[isHoriz and 'SetWidth' or 'SetHeight'](safeZone, element[isHoriz and 'GetWidth' or 'GetHeight'](element) * ratio)
+			local ratio = latency / castLength
+			if(ratio > 1) then
+				ratio = 1
+			end
+
+			safeZone[isHoriz and 'SetWidth' or 'SetHeight'](safeZone, element[isHoriz and 'GetWidth' or 'GetHeight'](element) * ratio)
+		end
 	end
 
 	if(element.empowering) then
