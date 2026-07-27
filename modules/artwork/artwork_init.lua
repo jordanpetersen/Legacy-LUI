@@ -99,8 +99,11 @@ module.defaults = {
 		},
 		SideBars = {
 			---@class (exact) SidebarDBOptions
+			---@field Side string
+			-- Primary keys stay "Right" / "Left" so existing profiles keep working.
 			Right = {
 				Enable = true,
+				Side = "Right",
 				OpenInstant = false,
 				Offset = 0,
 				IsOpen = false,
@@ -113,8 +116,24 @@ module.defaults = {
 				Scale = 1,
 				Point = "RIGHT",
 			},
+			Right2 = {
+				Enable = false,
+				Side = "Right",
+				OpenInstant = false,
+				Offset = 0,
+				IsOpen = false,
+				Anchor = "BT4Bar8",
+				Additional = "",
+				AutoPosition = false,
+				HideEmpty = true,
+				X = 15,
+				Y = 200,
+				Scale = 1,
+				Point = "RIGHT",
+			},
 			Left = {
 				Enable = true,
+				Side = "Left",
 				OpenInstant = false,
 				Offset = 0,
 				IsOpen = false,
@@ -124,6 +143,21 @@ module.defaults = {
 				HideEmpty = true,
 				X = 15,
 				Y = 0,
+				Scale = 1,
+				Point = "LEFT",
+			},
+			Left2 = {
+				Enable = false,
+				Side = "Left",
+				OpenInstant = false,
+				Offset = 0,
+				IsOpen = false,
+				Anchor = "BT4Bar7",
+				Additional = "",
+				AutoPosition = false,
+				HideEmpty = true,
+				X = 15,
+				Y = 200,
 				Scale = 1,
 				Point = "LEFT",
 			},
@@ -189,11 +223,39 @@ end
 function module:OnEnable()
 	module:setPanels()
 	module:setMainPanels()
-	local bar = module:CreateNewSideBar("Right", "Right")
-	--local bar2 = module:CreateNewSideBar("Left", "Left")
+	module:CreateConfiguredSideBars()
 	module:CreateOrb()
 	module:CreateNavBar()
 end
 
 function module:OnDisable()
+	for _, sidebar in module:IterateSidebars() do
+		if sidebar.OpenAnim and sidebar.OpenAnim:IsPlaying() then
+			sidebar.OpenAnim:Stop()
+		end
+		if sidebar.CloseAnim and sidebar.CloseAnim:IsPlaying() then
+			sidebar.CloseAnim:Stop()
+		end
+		local anchoredFrame = sidebar.db and sidebar.db.Anchor and _G[sidebar.db.Anchor]
+		if anchoredFrame and anchoredFrame.Hide then
+			-- Leave the external bar visible; only hide LUI chrome.
+		end
+		sidebar:Hide()
+	end
+end
+
+--- Apply Artwork color changes to live sidebars / chrome.
+function module:SetColors()
+	for _, sidebar in module:IterateSidebars() do
+		sidebar:Refresh()
+	end
+	if module.RefreshMainPanels then
+		module:RefreshMainPanels()
+	end
+	if module.RefreshNavBar then
+		module:RefreshNavBar()
+	end
+	if module.RefreshOrb then
+		module:RefreshOrb()
+	end
 end

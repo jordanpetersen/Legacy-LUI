@@ -1095,7 +1095,6 @@ function module:LoadOptions()
 		Bars = {
 			name = "Bars",
 			type = "group",
-			disabled = createDisabled("Bars"),
 			order = 4,
 			args = {
 				bar = {
@@ -1106,6 +1105,7 @@ function module:LoadOptions()
 					hasAlpha = true,
 					get = getColor,
 					set = createSetColor("Bars"),
+					disabled = createDisabled("Bars"),
 					order = 1,
 				},
 				bar2 = {
@@ -1116,16 +1116,32 @@ function module:LoadOptions()
 					hasAlpha = true,
 					get = getColor,
 					set = createSetColor("Bars"),
+					disabled = createDisabled("Bars"),
 					order = 2,
 				},
 				sidebar = {
 					name = "Sidebar Color",
-					desc = "Choose any Color for your Sidebar",
+					desc = "Color for Artwork sidebar chrome on the Right edge (SidebarRight). Left edge uses Artwork SidebarLeft.",
 					type = "color",
 					width = "full",
 					hasAlpha = true,
-					get = getColor,
-					set = createSetColor("Bars"),
+					get = function()
+						local art = LUI:GetModule("Artwork", true)
+						if not (art and art.db and art.db.profile.Colors.SidebarRight) then
+							return 1, 1, 1, 1
+						end
+						local c = art.db.profile.Colors.SidebarRight
+						return c.r, c.g, c.b, c.a
+					end,
+					set = function(_, r, g, b, a)
+						local art = LUI:GetModule("Artwork", true)
+						if not (art and art.db and art.db.profile.Colors.SidebarRight) then return end
+						local c = art.db.profile.Colors.SidebarRight
+						c.r, c.g, c.b, c.a = r, g, b, a
+						if art.SetColors then
+							art:SetColors()
+						end
+					end,
 					order = 3,
 				},
 			},
