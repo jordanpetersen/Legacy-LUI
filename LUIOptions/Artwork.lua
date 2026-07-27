@@ -209,7 +209,7 @@ local function CreateSidebarOptions(name, bar, barDB)
 		Scale = Opt:Slider({name = "Scale", desc = format("The scale of the sidebar. For best results, this should match the Pixel-To-UI factor.\n\nFor your resolution: %.f%%", PixelUtil.GetPixelToUIUnitFactor()*100), values = Opt.ScaleValues, disabled = IsSideBarDisabled}),
 		Y = Opt:InputNumber({name = "Y Offset", desc = "Vertical position of the sidebar.", disabled = IsSideBarDisabled}),
 		SpacerAnchor = Opt:Spacer({}),
-		Intro = Opt:Desc({name = "\nWhich Bar do you want to use for this Sidebar?\nChoose one or type in the frame to be anchored manually.\n\nMake sure your Bar is set to 6 buttons/2 columns and isn't used for another Sidebar.", disabled = IsSideBarDisabled}),
+		Intro = Opt:Desc({name = "\nWhich Bar do you want to use for this Sidebar?\nChoose one or type in the frame to be anchored manually.\n\nFor Bartender4 Auto-Adjust, use a vertical bar (12 buttons / 6 rows). Dominos presets are supported as anchors only.", disabled = IsSideBarDisabled}),
 		AnchorPreset = Opt:Select({name = "Bar Preset", values = PRESET_BAR_ANCHORS, get = presetDropdownGet, set = presetDropdownSet, disabled = IsSideBarDisabled}),
 		Anchor = Opt:Input({name = "Anchor", desc = "Frame that will be anchored to the sidebar", disabled = IsSideBarDisabled}),
 		SpacerAdjust = Opt:Spacer({}),

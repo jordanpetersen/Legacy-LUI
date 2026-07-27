@@ -196,4 +196,33 @@ function module:OnEnable()
 end
 
 function module:OnDisable()
+	for _, sidebar in module:IterateSidebars() do
+		if sidebar.OpenAnim and sidebar.OpenAnim:IsPlaying() then
+			sidebar.OpenAnim:Stop()
+		end
+		if sidebar.CloseAnim and sidebar.CloseAnim:IsPlaying() then
+			sidebar.CloseAnim:Stop()
+		end
+		local anchoredFrame = sidebar.db and sidebar.db.Anchor and _G[sidebar.db.Anchor]
+		if anchoredFrame and anchoredFrame.Hide then
+			-- Leave the external bar visible; only hide LUI chrome.
+		end
+		sidebar:Hide()
+	end
+end
+
+--- Apply Artwork color changes to live sidebars / chrome.
+function module:SetColors()
+	for _, sidebar in module:IterateSidebars() do
+		sidebar:Refresh()
+	end
+	if module.RefreshMainPanels then
+		module:RefreshMainPanels()
+	end
+	if module.RefreshNavBar then
+		module:RefreshNavBar()
+	end
+	if module.RefreshOrb then
+		module:RefreshOrb()
+	end
 end

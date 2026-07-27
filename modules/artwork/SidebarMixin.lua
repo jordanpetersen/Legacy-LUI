@@ -92,10 +92,12 @@ end
 
 --- Refresh the sidebar's settings and position
 function SidebarMixin:Refresh()
-	local r, g, b, a = module:RGBA("SidebarRight")
+	local colorKey = "Sidebar"..(self.name or self.side or "Right")
+	local r, g, b, a = module:RGBA(colorKey)
 
 	LUI:RegisterConfig(self, self.db)
 	LUI:RestorePosition(self)
+	self:SetScale(self.db.Scale or 1)
 	self:Show()
 
 	self.Sbar:SetVertexColor(r, g, b, 1)
@@ -175,7 +177,7 @@ module.SidebarMixin = SidebarMixin
 
 -- ####################################################################################################################
 -- ##### Sidebar Factory ##############################################################################################
--- ####################################################################################################################\
+-- ####################################################################################################################
 
 --- Create a new Sidebar
 ---@param name string # Name of the sidebar

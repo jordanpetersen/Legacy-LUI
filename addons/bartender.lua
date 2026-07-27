@@ -398,28 +398,19 @@ function LUI:InstallBartender()
 	}
 
 	do
-		--ActionBarsDefaults[CharName].actionbars[10]
-		local bar_mod = LUI:GetModule("Bars", true)
-		local bardb = bar_mod and bar_mod.db.profile
-		if bardb and bardb.SidebarRight1.Enable and strsub(bardb.SidebarRight1.Anchor, 1, 3) == "BT4" then
-			local _, num = strsplit("r", bardb.SidebarRight1.Anchor)
-			local barOpt = ActionBarsDefaults[CharName].actionbars[tonumber(num)]
-			barOpt.enabled = true
-		end
-		if bardb and bardb.SidebarRight2.Enable and strsub(bardb.SidebarRight2.Anchor, 1, 3) == "BT4" then
-			local _, num = strsplit("r", bardb.SidebarRight2.Anchor)
-			local barOpt = ActionBarsDefaults[CharName].actionbars[tonumber(num)]
-			barOpt.enabled = true
-		end
-		if bardb and bardb.SidebarLeft1.Enable and strsub(bardb.SidebarLeft1.Anchor, 1, 3) == "BT4" then
-			local _, num = strsplit("r", bardb.SidebarLeft1.Anchor)
-			local barOpt = ActionBarsDefaults[CharName].actionbars[tonumber(num)]
-			barOpt.enabled = true
-		end
-		if bardb and bardb.SidebarLeft2.Enable and strsub(bardb.SidebarLeft2.Anchor, 1, 3) == "BT4" then
-			local _, num = strsplit("r", bardb.SidebarLeft2.Anchor)
-			local barOpt = ActionBarsDefaults[CharName].actionbars[tonumber(num)]
-			barOpt.enabled = true
+		-- Enable BT4 bars that Artwork sidebars are anchored to (Artwork.SideBars, not the retired Bars module).
+		local art = LUI:GetModule("Artwork", true)
+		local sideBars = art and art.db and art.db.profile and art.db.profile.SideBars
+		if sideBars then
+			for _, side in pairs(sideBars) do
+				if side.Enable and side.Anchor and strsub(side.Anchor, 1, 3) == "BT4" then
+					local _, num = strsplit("r", side.Anchor)
+					num = tonumber(num)
+					if num and ActionBarsDefaults[CharName].actionbars[num] then
+						ActionBarsDefaults[CharName].actionbars[num].enabled = true
+					end
+				end
+			end
 		end
 	end
 
