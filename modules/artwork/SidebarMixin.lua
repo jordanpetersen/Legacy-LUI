@@ -193,31 +193,36 @@ local function ApplySideTexCoords(texture, atlasName, flipHorizontal)
 	end
 end
 
---- Migrate legacy single Right/Left keys to Right1/Left1.
+--- Ensure Side/Point fields exist; fold any short-lived Right1/Left1 keys back into Right/Left.
 function module:MigrateSideBars()
 	local sb = module.db.profile.SideBars
 	if not sb then return end
 
-	if sb.Right and not sb.Right1 then
-		sb.Right1 = sb.Right
-		sb.Right1.Side = "Right"
-		sb.Right1.Point = sb.Right1.Point or "RIGHT"
-		sb.Right = nil
+	-- If a profile briefly used Right1/Left1, merge back into the stable primary keys.
+	if sb.Right1 then
+		if not sb.Right then
+			sb.Right = sb.Right1
+		end
+		sb.Right1 = nil
 	end
-	if sb.Left and not sb.Left1 then
-		sb.Left1 = sb.Left
-		sb.Left1.Side = "Left"
-		sb.Left1.Point = sb.Left1.Point or "LEFT"
-		sb.Left = nil
+	if sb.Left1 then
+		if not sb.Left then
+			sb.Left = sb.Left1
+		end
+		sb.Left1 = nil
 	end
 
-	-- Ensure Side field exists on known slots
 	for name, cfg in pairs(sb) do
-		if type(cfg) == "table" and not cfg.Side then
-			if strfind(name, "^Right") then
-				cfg.Side = "Right"
-			elseif strfind(name, "^Left") then
-				cfg.Side = "Left"
+		if type(cfg) == "table" then
+			if not cfg.Side then
+				if name == "Right" or strfind(name, "^Right") then
+					cfg.Side = "Right"
+				elseif name == "Left" or strfind(name, "^Left") then
+					cfg.Side = "Left"
+				end
+			end
+			if cfg.Side and not cfg.Point then
+				cfg.Point = (cfg.Side == "Right") and "RIGHT" or "LEFT"
 			end
 		end
 	end
@@ -396,7 +401,7 @@ end
 --- Create every SideBars profile entry that has a Side field.
 function module:CreateConfiguredSideBars()
 	module:MigrateSideBars()
-	local order = { "Right1", "Right2", "Left1", "Left2" }
+	local order = { "Right", "Right2", "Left", "Left2" }
 	local created = {}
 	for _, name in ipairs(order) do
 		local cfg = module.db.profile.SideBars[name]
@@ -405,7 +410,7 @@ function module:CreateConfiguredSideBars()
 			created[name] = true
 		end
 	end
-	-- Any extra custom keys (future N sidebars) still get created
+	-- Any extra custom keys (e.g. Right3) still get created
 	for name, cfg in pairs(module.db.profile.SideBars) do
 		if type(cfg) == "table" and cfg.Side and not created[name] then
 			module:CreateNewSideBar(name, cfg.Side)

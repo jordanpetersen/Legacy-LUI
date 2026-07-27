@@ -200,7 +200,12 @@ local function CreateSidebarOptions(name, bar, barDB)
 
 	local side = barDB.Side or bar.side or "Right"
 	local colorKey = "Sidebar"..side
-	local displayName = name:gsub("(%a+)(%d+)", "%1 %2").." Sidebar"
+	local displayName
+	if name == "Right" or name == "Left" then
+		displayName = name.." Sidebar"
+	else
+		displayName = name:gsub("(%a+)(%d+)", "%1 %2").." Sidebar"
+	end
 
 	return Opt:Group({name = displayName, db = barDB, arg = bar, args = {
 		Header = Opt:Header({name = displayName}),

@@ -100,7 +100,8 @@ module.defaults = {
 		SideBars = {
 			---@class (exact) SidebarDBOptions
 			---@field Side string
-			Right1 = {
+			-- Primary keys stay "Right" / "Left" so existing profiles keep working.
+			Right = {
 				Enable = true,
 				Side = "Right",
 				OpenInstant = false,
@@ -130,7 +131,7 @@ module.defaults = {
 				Scale = 1,
 				Point = "RIGHT",
 			},
-			Left1 = {
+			Left = {
 				Enable = true,
 				Side = "Left",
 				OpenInstant = false,
