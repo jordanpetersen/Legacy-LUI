@@ -41,7 +41,7 @@ module.defaults = {
 		},
 		Bank = {
 			Lock = false,
-			RowSize = 16,
+			RowSize = 14,
 			Padding = 8,
 			Spacing = 4,
 			Scale = 1,
@@ -57,25 +57,16 @@ module.defaults = {
 			BorderSize = 5,
 			X = 0,
 			Y = 0,
+			ActiveTab = nil, -- CharacterBankTab bag ID last selected
 		},
+		-- Reagent bank frame removed in 11.2; reagent-capable character tabs replace it.
+		-- Kept empty shell so old profiles migrate without AceDB errors.
 		Reagent = {
 			Lock = false,
 			RowSize = 16,
 			Padding = 8,
 			Spacing = 4,
 			Scale = 1,
-			BagBar = true,
-			ItemQuality = true,
-			ItemLevel = false,
-			BagNewline = false,
-			ShowNew = false,
-			ShowQuest = true,
-			ShowOverlay = true,
-			BackgroundTexture = "Blizzard Tooltip",
-			BorderTexture = "Stripped_medium",
-			BorderSize = 5,
-			X = 0,
-			Y = 0,
 		},
 		Textures = {
 			BackgroundTex = "Blizzard Tooltip",
@@ -127,24 +118,44 @@ function module:OnEnable()
 	module:SecureHook("CloseBackpack",  module.CloseBags,  true)
 	module:SecureHook("CloseAllBags",   module.CloseBags,  true)
 
-	-- module:RegisterEvent("BANKFRAME_OPENED", module.OpenBank)
-	-- module:RegisterEvent("BANKFRAME_CLOSED", module.CloseBank)
-	-- module:RegisterEvent("PLAYERBANKSLOTS_CHANGED", module.BankContainer.BankSlotsUpdate)
-	-- module:RegisterEvent("PLAYERREAGENTBANKSLOTS_CHANGED", module.BankReagentContainer.BankSlotsUpdate)
+	module:RegisterEvent("BANKFRAME_OPENED", module.OpenBank)
+	module:RegisterEvent("BANKFRAME_CLOSED", module.CloseBank)
+	module:RegisterEvent("BANK_TAB_SETTINGS_UPDATED", "OnBankTabSettingsUpdated")
+	module:RegisterEvent("PLAYERBANKBAGSLOTS_CHANGED", "OnBankBagSlotsChanged")
 
 	tinsert(UISpecialFrames, "LUIBags")
-	-- tinsert(UISpecialFrames, "LUIBank")
-	-- tinsert(UISpecialFrames, "LUIReagent")
+	tinsert(UISpecialFrames, "LUIBank")
 
-	-- Close bags before Enabling/Disabling the module
-	-- _G.BankFrame:UnregisterAllEvents()
+	-- Prevent Blizzard bank UI from fighting LUI while the module is enabled.
+	if _G.BankFrame then
+		_G.BankFrame:UnregisterAllEvents()
+	end
 	_G.CloseAllBags()
+end
+
+function module:OnBankTabSettingsUpdated(event, bankType)
+	local characterType = Enum.BankType and Enum.BankType.Character or 0
+	if LUIBank and (bankType == nil or bankType == characterType) then
+		LUIBank:BankTabsUpdated()
+	end
+end
+
+function module:OnBankBagSlotsChanged()
+	if LUIBank and LUIBank:IsShown() then
+		LUIBank:BankTabsUpdated()
+	end
 end
 
 function module:OnDisable()
 	_G.CloseAllBags()
+	module:UnhookAll()
+	module:UnregisterEvent("BANKFRAME_OPENED")
+	module:UnregisterEvent("BANKFRAME_CLOSED")
+	module:UnregisterEvent("BANK_TAB_SETTINGS_UPDATED")
+	module:UnregisterEvent("PLAYERBANKBAGSLOTS_CHANGED")
 
-	-- Bank
-	-- _G.BankFrame:RegisterEvent("BANKFRAME_OPENED")
-	-- _G.BankFrame:RegisterEvent("BANKFRAME_CLOSED")
+	if _G.BankFrame then
+		_G.BankFrame:RegisterEvent("BANKFRAME_OPENED")
+		_G.BankFrame:RegisterEvent("BANKFRAME_CLOSED")
+	end
 end

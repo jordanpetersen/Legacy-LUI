@@ -744,9 +744,13 @@ function module:SetBags()
 	module:CreateNewContainer("Bags", module.BagsContainer)
 	LUIBags:CreateTitleBar()
 
-	-- Bank
-	-- module:CreateNewContainer("Bank", module.BankContainer)
-	-- module:CreateNewContainer("Reagent", module.BankReagentContainer)
+	-- Character bank tabs (11.2+)
+	-- CreateNewContainer AceHooks ContainerMixin.Layout after Bank.Layout; bank must own Layout alone
+	-- so inactive tabs stay hidden.
+	module:CreateNewContainer("Bank", module.BankContainer)
+	if module.IsHooked and module:IsHooked(LUIBank, "Layout") then
+		module:Unhook(LUIBank, "Layout")
+	end
 
 	module:Refresh()
 end
