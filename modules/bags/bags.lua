@@ -752,5 +752,11 @@ function module:SetBags()
 		module:Unhook(LUIBank, "Layout")
 	end
 
+	-- Warband (account) bank tabs
+	module:CreateNewContainer("Warband", module.WarbandContainer)
+	if module.IsHooked and module:IsHooked(LUIWarband, "Layout") then
+		module:Unhook(LUIWarband, "Layout")
+	end
+
 	module:Refresh()
 end

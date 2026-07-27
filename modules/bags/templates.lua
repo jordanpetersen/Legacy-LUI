@@ -32,6 +32,7 @@ local SEARCH = _G.SEARCH
 local CLEANUP_TEXT = {
 	LUIBags_CleanUp = BAG_CLEANUP_BAGS,
 	LUIBank_CleanUp = BAG_CLEANUP_BANK,
+	LUIWarband_CleanUp = BAG_CLEANUP_BANK,
 	LUIReagent_CleanUp = BAG_CLEANUP_REAGENT_BANK,
 }
 

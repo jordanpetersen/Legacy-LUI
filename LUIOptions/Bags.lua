@@ -52,6 +52,7 @@ Bags.args = {
 	Settings = Opt:Group({name = L["General Settings"], hidden = true, db = db, args = Settings}),
 	Backpack = Opt:Group({name = L["Backpack Options"], db = db.Bags, args = GenerateBagsOptions("Backpack")}),
 	Bank = Opt:Group({name = L["Bank Options"], db = db.Bank, args = GenerateBagsOptions("Bank")}),
+	Warband = Opt:Group({name = "Warband Options", db = db.Warband, args = GenerateBagsOptions("Warband")}),
 	Reagents = Opt:Group({name = L["Reagents Options"], hidden = true, db = db.Reagent, args = GenerateBagsOptions("Reagents")}),
 	Textures = Opt:Group({name = L["Textures"], hidden = true, db = db.Textures, args = Textures}),
 }

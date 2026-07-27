@@ -1,8 +1,9 @@
 -- ####################################################################################################################
--- ##### Character Bank (Retail 11.2+ tabs) ############################################################################
+-- ##### Tabbed Bank Containers (Retail 11.2+) ########################################################################
 -- ####################################################################################################################
--- Pre-11.2 bank bags + separate reagent bank are gone. Character storage is CharacterBankTab_1..6 (~98 slots each).
--- Any tab may be flagged reagents-only via depositFlags. Warband (AccountBankTab_*) is Phase B.
+-- Character: CharacterBankTab_1..6
+-- Warband:   AccountBankTab_1..5
+-- Pre-11.2 bank bags + separate reagent bank are gone.
 
 ---@class LUIAddon
 local LUI = select(2, ...)
@@ -21,20 +22,299 @@ local GameTooltip = _G.GameTooltip
 local BANK_BAG_PURCHASE = _G.BANK_BAG_PURCHASE
 local COSTS_LABEL = _G.COSTS_LABEL
 local ipairs = _G.ipairs
+local pairs = _G.pairs
 
 local BANK_SLOT_TEMPLATE = "ContainerFrameItemButtonTemplate"
-local BANK_SLOT_NAME_FORMAT = "LUIBank_Item%d_%d"
-local BANK_TAB_BUTTON_FORMAT = "LUIBank_Tab%d"
-local BANK_TYPE = Enum.BankType and Enum.BankType.Character or 0
 local REAGENT_FLAG = Enum.BagSlotFlags and Enum.BagSlotFlags.ClassReagents or 0x80
+local BANK_TYPE_CHARACTER = Enum.BankType and Enum.BankType.Character or 0
+local BANK_TYPE_ACCOUNT = Enum.BankType and Enum.BankType.Account or 2
 
 -- ####################################################################################################################
--- ##### Bank Container Object ########################################################################################
+-- ##### Shared tabbed-bank factory ###################################################################################
 -- ####################################################################################################################
 
-local Bank = {
-	NUM_BAG_IDS = 6,
-	BAG_ID_LIST = {
+---@class TabbedBankConfig
+---@field name string # AceDB / frame name key ("Bank" or "Warband")
+---@field bankType number # Enum.BankType
+---@field bagIds number[] # Enum.BagIndex tab IDs
+---@field slotNameFormat string
+---@field tabButtonFormat string
+---@field cleanupButtonName string
+---@field tabLabel string # Tooltip label prefix
+
+---@param cfg TabbedBankConfig
+local function CreateTabbedBankContainer(cfg)
+	local bankType = cfg.bankType
+	local bagIds = cfg.bagIds
+
+	local Bank = {
+		NUM_BAG_IDS = #bagIds,
+		BAG_ID_LIST = bagIds,
+		name = cfg.name,
+		bankType = bankType,
+		activeTabId = nil,
+		tabButtons = nil,
+	}
+
+	function Bank:OnShow()
+	end
+
+	function Bank:OnHide()
+		module:MaybeCloseBankInteraction()
+	end
+
+	function Bank:GetPurchasedTabIDs()
+		if not C_Bank or not C_Bank.FetchPurchasedBankTabIDs then
+			return {}
+		end
+		return C_Bank.FetchPurchasedBankTabIDs(bankType) or {}
+	end
+
+	function Bank:GetPurchasedTabDataByID()
+		local byID = {}
+		if not C_Bank or not C_Bank.FetchPurchasedBankTabData then
+			return byID
+		end
+		local data = C_Bank.FetchPurchasedBankTabData(bankType)
+		if not data then
+			return byID
+		end
+		for _, tab in ipairs(data) do
+			if tab.ID then
+				byID[tab.ID] = tab
+			end
+		end
+		return byID
+	end
+
+	function Bank:IsTabPurchased(tabId)
+		return tContains(self:GetPurchasedTabIDs(), tabId)
+	end
+
+	function Bank:CanView()
+		if C_Bank and C_Bank.CanViewBank then
+			return C_Bank.CanViewBank(bankType)
+		end
+		-- Fallback: purchased list non-nil/non-empty while at bank
+		local ids = self:GetPurchasedTabIDs()
+		return ids and #ids > 0
+	end
+
+	function Bank:GetActiveTabId()
+		if self.activeTabId and self:IsTabPurchased(self.activeTabId) then
+			return self.activeTabId
+		end
+		local purchased = self:GetPurchasedTabIDs()
+		self.activeTabId = purchased[1] or self.BAG_ID_LIST[1]
+		return self.activeTabId
+	end
+
+	function Bank:SetActiveTab(tabId)
+		if not tabId or not self:IsTabPurchased(tabId) then
+			return
+		end
+		self.activeTabId = tabId
+		if self.db then
+			self.db.ActiveTab = tabId
+		end
+		self:Layout()
+		self:UpdateTabBar()
+	end
+
+	function Bank:Layout()
+		local activeId = self:GetActiveTabId()
+
+		for i = 1, self.NUM_BAG_IDS do
+			local id = self.BAG_ID_LIST[i]
+			local itemList = self.itemList[id]
+			local bagFrame = self.bagList[id]
+			if not itemList or not bagFrame then
+				-- skip
+			elseif id ~= activeId or not self:IsTabPurchased(id) then
+				bagFrame:Hide()
+				for j = 1, #itemList do
+					if itemList[j] then
+						itemList[j]:Hide()
+					end
+				end
+			else
+				local bagCount = C_Container.GetContainerNumSlots(id) or 0
+				bagFrame:Show()
+				for j = 1, bagCount do
+					itemList[j] = self:NewItemSlot(id, j)
+					self:SlotUpdate(itemList[j])
+					itemList[j]:Show()
+				end
+				for j = bagCount + 1, #itemList do
+					if itemList[j] then
+						itemList[j]:Hide()
+					end
+				end
+			end
+		end
+
+		self:SetAnchors()
+		self:UpdateTabBar()
+
+		if self.utilBar then
+			self.utilBar:SetAnchors()
+		end
+
+		if self.editbox and self.editbox:IsShown() then
+			self:SearchUpdate()
+		end
+	end
+
+	function Bank:NewItemSlot(id, slot)
+		if self.itemList[id] and self.itemList[id][slot] then
+			return self.itemList[id][slot]
+		end
+
+		local name = format(cfg.slotNameFormat, id, slot)
+		local itemSlot = module:CreateSlot(name, self.bagList[id], BANK_SLOT_TEMPLATE)
+		itemSlot.id = id
+		itemSlot.slot = slot
+		itemSlot:SetID(slot)
+		itemSlot:Show()
+		self:SetItemSlotProperties(itemSlot)
+		return itemSlot
+	end
+
+	function Bank:CreateBagBar()
+		self.tabButtons = {}
+		for i = 1, self.NUM_BAG_IDS do
+			local tabId = self.BAG_ID_LIST[i]
+			local name = format(cfg.tabButtonFormat, i)
+			local button = module:CreateSlot(name, self.bagsBar, "")
+			button.tabId = tabId
+			button.tabIndex = i
+			button.container = self
+			button.icon = _G[name.."IconTexture"]
+			button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+			button:SetScript("OnClick", function(btn)
+				local bank = btn.container
+				if bank:IsTabPurchased(btn.tabId) then
+					bank:SetActiveTab(btn.tabId)
+				elseif C_Bank and C_Bank.CanPurchaseBankTab and C_Bank.CanPurchaseBankTab(bankType) then
+					C_Bank.PurchaseBankTab(bankType)
+				end
+			end)
+			button:SetScript("OnEnter", function(btn)
+				GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+				local tabData = btn.container:GetPurchasedTabDataByID()[btn.tabId]
+				if tabData then
+					GameTooltip:SetText(tabData.name or format("%s %d", cfg.tabLabel, btn.tabIndex))
+					if tabData.depositFlags and bit.band(tabData.depositFlags, REAGENT_FLAG) ~= 0 then
+						GameTooltip:AddLine("Reagents", 0.2, 0.8, 0.2)
+					end
+				elseif C_Bank and C_Bank.CanPurchaseBankTab and C_Bank.CanPurchaseBankTab(bankType) then
+					GameTooltip:SetText(BANK_BAG_PURCHASE or "Purchase Bank Tab")
+					if C_Bank.FetchNextPurchasableBankTabCost then
+						local cost = C_Bank.FetchNextPurchasableBankTabCost(bankType)
+						if cost and GetMoneyString then
+							GameTooltip:AddLine((COSTS_LABEL or "Cost:").." "..GetMoneyString(cost), 1, 1, 1)
+						end
+					end
+				else
+					GameTooltip:SetText(format("%s %d", cfg.tabLabel, btn.tabIndex))
+					GameTooltip:AddLine("Locked", 0.6, 0.6, 0.6)
+				end
+				GameTooltip:Show()
+			end)
+			button:SetScript("OnLeave", _G.GameTooltip_Hide)
+
+			self.bagsBar:AddNewButton(button)
+			self.tabButtons[i] = button
+		end
+		self:UpdateTabBar()
+	end
+
+	function Bank:UpdateTabBar()
+		if not self.tabButtons then return end
+
+		local tabDataByID = self:GetPurchasedTabDataByID()
+		local activeId = self:GetActiveTabId()
+		local canPurchase = C_Bank and C_Bank.CanPurchaseBankTab and C_Bank.CanPurchaseBankTab(bankType)
+
+		for i = 1, self.NUM_BAG_IDS do
+			local button = self.tabButtons[i]
+			local tabId = self.BAG_ID_LIST[i]
+			local purchased = self:IsTabPurchased(tabId)
+			local tabData = tabDataByID[tabId]
+			local icon = button.icon
+
+			if tabData and tabData.icon and icon then
+				icon:SetTexture(tabData.icon)
+			elseif icon then
+				icon:SetTexture("Interface\\Icons\\INV_Misc_Bag_10")
+			end
+
+			if purchased then
+				button:SetAlpha(tabId == activeId and 1 or 0.75)
+				if tabData and tabData.depositFlags and bit.band(tabData.depositFlags, REAGENT_FLAG) ~= 0 then
+					button:SetBackdropBorderColor(0.2, 0.8, 0.2, 1)
+				else
+					button:SetBackdropBorderColor(module:RGBA("Border"))
+				end
+			elseif canPurchase then
+				local firstLocked = true
+				for j = 1, i - 1 do
+					if not self:IsTabPurchased(self.BAG_ID_LIST[j]) then
+						firstLocked = false
+						break
+					end
+				end
+				button:SetAlpha(firstLocked and 1 or 0.25)
+				if icon then
+					if firstLocked and GetCoinIcon then
+						icon:SetTexture(GetCoinIcon(1))
+					elseif firstLocked then
+						icon:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
+					else
+						icon:SetTexture("")
+					end
+				end
+			else
+				button:SetAlpha(0.2)
+			end
+		end
+
+		if self.bagsBar and self.bagsBar.SetAnchors then
+			self.bagsBar:SetAnchors()
+		end
+	end
+
+	function Bank:CreateUtilBar()
+		local utilBar = self.utilBar
+		local sortFunc = function()
+			if C_Container.SortBank then
+				C_Container.SortBank(bankType)
+			elseif bankType == BANK_TYPE_CHARACTER and C_Container.SortBankBags then
+				C_Container.SortBankBags()
+			end
+		end
+		local button = module:CreateCleanUpButton(cfg.cleanupButtonName, utilBar, sortFunc)
+		utilBar:AddNewButton(button)
+	end
+
+	function Bank:BankTabsUpdated()
+		if self.db and self.db.ActiveTab and self:IsTabPurchased(self.db.ActiveTab) then
+			self.activeTabId = self.db.ActiveTab
+		end
+		self:Layout()
+	end
+
+	return Bank
+end
+
+-- ####################################################################################################################
+-- ##### Character Bank ###############################################################################################
+-- ####################################################################################################################
+
+module.BankContainer = CreateTabbedBankContainer({
+	name = "Bank",
+	bankType = BANK_TYPE_CHARACTER,
+	bagIds = {
 		Enum.BagIndex.CharacterBankTab_1,
 		Enum.BagIndex.CharacterBankTab_2,
 		Enum.BagIndex.CharacterBankTab_3,
@@ -42,262 +322,31 @@ local Bank = {
 		Enum.BagIndex.CharacterBankTab_5,
 		Enum.BagIndex.CharacterBankTab_6,
 	},
-	name = "Bank",
-	activeTabId = nil,
-	tabButtons = nil,
-}
-
-function Bank:OnShow()
-end
-
-function Bank:OnHide()
-	if _G.CloseBankFrame then
-		_G.CloseBankFrame()
-	end
-end
-
---- Purchased tab IDs for the character bank (empty table if not at bank / unavailable).
----@return number[]
-function Bank:GetPurchasedTabIDs()
-	if not C_Bank or not C_Bank.FetchPurchasedBankTabIDs then
-		return {}
-	end
-	return C_Bank.FetchPurchasedBankTabIDs(BANK_TYPE) or {}
-end
-
---- Tab metadata keyed by bag ID, when available at the bank.
----@return table<number, table>
-function Bank:GetPurchasedTabDataByID()
-	local byID = {}
-	if not C_Bank or not C_Bank.FetchPurchasedBankTabData then
-		return byID
-	end
-	local data = C_Bank.FetchPurchasedBankTabData(BANK_TYPE)
-	if not data then
-		return byID
-	end
-	for _, tab in ipairs(data) do
-		if tab.ID then
-			byID[tab.ID] = tab
-		end
-	end
-	return byID
-end
-
-function Bank:IsTabPurchased(tabId)
-	return tContains(self:GetPurchasedTabIDs(), tabId)
-end
-
-function Bank:GetActiveTabId()
-	if self.activeTabId and self:IsTabPurchased(self.activeTabId) then
-		return self.activeTabId
-	end
-	local purchased = self:GetPurchasedTabIDs()
-	self.activeTabId = purchased[1] or self.BAG_ID_LIST[1]
-	return self.activeTabId
-end
-
-function Bank:SetActiveTab(tabId)
-	if not tabId or not self:IsTabPurchased(tabId) then
-		return
-	end
-	self.activeTabId = tabId
-	if self.db then
-		self.db.ActiveTab = tabId
-	end
-	self:Layout()
-	self:UpdateTabBar()
-end
-
-function Bank:Layout()
-	local activeId = self:GetActiveTabId()
-
-	for i = 1, self.NUM_BAG_IDS do
-		local id = self.BAG_ID_LIST[i]
-		local itemList = self.itemList[id]
-		local bagFrame = self.bagList[id]
-		if not itemList or not bagFrame then
-			-- skip
-		elseif id ~= activeId or not self:IsTabPurchased(id) then
-			bagFrame:Hide()
-			for j = 1, #itemList do
-				if itemList[j] then
-					itemList[j]:Hide()
-				end
-			end
-		else
-			local bagCount = C_Container.GetContainerNumSlots(id) or 0
-			bagFrame:Show()
-			for j = 1, bagCount do
-				itemList[j] = self:NewItemSlot(id, j)
-				self:SlotUpdate(itemList[j])
-				itemList[j]:Show()
-			end
-			for j = bagCount + 1, #itemList do
-				if itemList[j] then
-					itemList[j]:Hide()
-				end
-			end
-		end
-	end
-
-	self:SetAnchors()
-	self:UpdateTabBar()
-
-	if self.utilBar then
-		self.utilBar:SetAnchors()
-	end
-
-	if self.editbox and self.editbox:IsShown() then
-		self:SearchUpdate()
-	end
-end
-
-function Bank:NewItemSlot(id, slot)
-	if self.itemList[id] and self.itemList[id][slot] then
-		return self.itemList[id][slot]
-	end
-
-	local name = format(BANK_SLOT_NAME_FORMAT, id, slot)
-	local itemSlot = module:CreateSlot(name, self.bagList[id], BANK_SLOT_TEMPLATE)
-	itemSlot.id = id
-	itemSlot.slot = slot
-	itemSlot:SetID(slot)
-	itemSlot:Show()
-	self:SetItemSlotProperties(itemSlot)
-	return itemSlot
-end
+	slotNameFormat = "LUIBank_Item%d_%d",
+	tabButtonFormat = "LUIBank_Tab%d",
+	cleanupButtonName = "LUIBank_CleanUp",
+	tabLabel = "Bank Tab",
+})
 
 -- ####################################################################################################################
--- ##### Tab strip (replaces old bank bag purchase bar) ###############################################################
+-- ##### Warband Bank (Account) #######################################################################################
 -- ####################################################################################################################
 
-function Bank:CreateBagBar()
-	self.tabButtons = {}
-	for i = 1, self.NUM_BAG_IDS do
-		local tabId = self.BAG_ID_LIST[i]
-		local name = format(BANK_TAB_BUTTON_FORMAT, i)
-		local button = module:CreateSlot(name, self.bagsBar, "")
-		button.tabId = tabId
-		button.tabIndex = i
-		button.container = self
-		button.icon = _G[name.."IconTexture"]
-		button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-		button:SetScript("OnClick", function(btn)
-			local bank = btn.container
-			if bank:IsTabPurchased(btn.tabId) then
-				bank:SetActiveTab(btn.tabId)
-			elseif C_Bank and C_Bank.CanPurchaseBankTab and C_Bank.CanPurchaseBankTab(BANK_TYPE) then
-				-- Purchase unlocks the next available tab (not a specific slot index).
-				C_Bank.PurchaseBankTab(BANK_TYPE)
-			end
-		end)
-		button:SetScript("OnEnter", function(btn)
-			GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-			local tabData = btn.container:GetPurchasedTabDataByID()[btn.tabId]
-			if tabData then
-				GameTooltip:SetText(tabData.name or format("Bank Tab %d", btn.tabIndex))
-				if tabData.depositFlags and bit.band(tabData.depositFlags, REAGENT_FLAG) ~= 0 then
-					GameTooltip:AddLine("Reagents", 0.2, 0.8, 0.2)
-				end
-			elseif C_Bank and C_Bank.CanPurchaseBankTab and C_Bank.CanPurchaseBankTab(BANK_TYPE) then
-				GameTooltip:SetText(BANK_BAG_PURCHASE or "Purchase Bank Tab")
-				if C_Bank.FetchNextPurchasableBankTabCost then
-					local cost = C_Bank.FetchNextPurchasableBankTabCost(BANK_TYPE)
-					if cost and GetMoneyString then
-						GameTooltip:AddLine((COSTS_LABEL or "Cost:").." "..GetMoneyString(cost), 1, 1, 1)
-					end
-				end
-			else
-				GameTooltip:SetText(format("Bank Tab %d", btn.tabIndex))
-				GameTooltip:AddLine("Locked", 0.6, 0.6, 0.6)
-			end
-			GameTooltip:Show()
-		end)
-		button:SetScript("OnLeave", _G.GameTooltip_Hide)
-
-		self.bagsBar:AddNewButton(button)
-		self.tabButtons[i] = button
-	end
-	self:UpdateTabBar()
-end
-
-function Bank:UpdateTabBar()
-	if not self.tabButtons then return end
-
-	local tabDataByID = self:GetPurchasedTabDataByID()
-	local activeId = self:GetActiveTabId()
-	local canPurchase = C_Bank and C_Bank.CanPurchaseBankTab and C_Bank.CanPurchaseBankTab(BANK_TYPE)
-
-	for i = 1, self.NUM_BAG_IDS do
-		local button = self.tabButtons[i]
-		local tabId = self.BAG_ID_LIST[i]
-		local purchased = self:IsTabPurchased(tabId)
-		local tabData = tabDataByID[tabId]
-		local icon = button.icon
-
-		if tabData and tabData.icon and icon then
-			icon:SetTexture(tabData.icon)
-		elseif icon then
-			icon:SetTexture("Interface\\Icons\\INV_Misc_Bag_10")
-		end
-
-		if purchased then
-			button:SetAlpha(tabId == activeId and 1 or 0.75)
-			if tabData and tabData.depositFlags and bit.band(tabData.depositFlags, REAGENT_FLAG) ~= 0 then
-				button:SetBackdropBorderColor(0.2, 0.8, 0.2, 1)
-			else
-				button:SetBackdropBorderColor(module:RGBA("Border"))
-			end
-		elseif canPurchase then
-			-- Offer purchase on the first locked tab only visually.
-			local firstLocked = true
-			for j = 1, i - 1 do
-				if not self:IsTabPurchased(self.BAG_ID_LIST[j]) then
-					firstLocked = false
-					break
-				end
-			end
-			button:SetAlpha(firstLocked and 1 or 0.25)
-			if icon then
-				if firstLocked and GetCoinIcon then
-					icon:SetTexture(GetCoinIcon(1))
-				elseif firstLocked then
-					icon:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
-				else
-					icon:SetTexture("")
-				end
-			end
-		else
-			button:SetAlpha(0.2)
-		end
-	end
-
-	if self.bagsBar and self.bagsBar.SetAnchors then
-		self.bagsBar:SetAnchors()
-	end
-end
-
-function Bank:CreateUtilBar()
-	local utilBar = self.utilBar
-	local sortFunc = function()
-		if C_Container.SortBank then
-			C_Container.SortBank(BANK_TYPE)
-		elseif C_Container.SortBankBags then
-			C_Container.SortBankBags()
-		end
-	end
-	local button = module:CreateCleanUpButton("LUIBank_CleanUp", utilBar, sortFunc)
-	utilBar:AddNewButton(button)
-end
-
-function Bank:BankTabsUpdated()
-	-- Prefer saved ActiveTab when still valid.
-	if self.db and self.db.ActiveTab and self:IsTabPurchased(self.db.ActiveTab) then
-		self.activeTabId = self.db.ActiveTab
-	end
-	self:Layout()
-end
+module.WarbandContainer = CreateTabbedBankContainer({
+	name = "Warband",
+	bankType = BANK_TYPE_ACCOUNT,
+	bagIds = {
+		Enum.BagIndex.AccountBankTab_1,
+		Enum.BagIndex.AccountBankTab_2,
+		Enum.BagIndex.AccountBankTab_3,
+		Enum.BagIndex.AccountBankTab_4,
+		Enum.BagIndex.AccountBankTab_5,
+	},
+	slotNameFormat = "LUIWarband_Item%d_%d",
+	tabButtonFormat = "LUIWarband_Tab%d",
+	cleanupButtonName = "LUIWarband_CleanUp",
+	tabLabel = "Warband Tab",
+})
 
 -- ####################################################################################################################
 -- ##### Module open / close ##########################################################################################
@@ -305,17 +354,43 @@ end
 
 local hasBankOpenBags = false
 
+local function RefreshBankContainer(frame)
+	if not frame then return end
+	if frame.db and frame.db.ActiveTab then
+		frame.activeTabId = frame.db.ActiveTab
+	end
+	frame:Open()
+	frame:BankTabsUpdated()
+end
+
+function module:MaybeCloseBankInteraction()
+	local bankOpen = LUIBank and LUIBank:IsShown()
+	local warbandOpen = LUIWarband and LUIWarband:IsShown()
+	if not bankOpen and not warbandOpen and _G.CloseBankFrame then
+		_G.CloseBankFrame()
+	end
+end
+
 function module.OpenBank()
-	if not LUIBank then return end
 	if LUIBags and not LUIBags:IsShown() then
 		hasBankOpenBags = true
 		LUIBags:Open()
 	end
-	if LUIBank.db and LUIBank.db.ActiveTab then
-		LUIBank.activeTabId = LUIBank.db.ActiveTab
+
+	local showCharacter = not C_Bank or not C_Bank.CanViewBank or C_Bank.CanViewBank(BANK_TYPE_CHARACTER)
+	local showWarband = C_Bank and C_Bank.CanViewBank and C_Bank.CanViewBank(BANK_TYPE_ACCOUNT)
+
+	if showCharacter and LUIBank then
+		RefreshBankContainer(LUIBank)
+	elseif LUIBank then
+		LUIBank:Hide()
 	end
-	LUIBank:Open()
-	LUIBank:BankTabsUpdated()
+
+	if showWarband and LUIWarband then
+		RefreshBankContainer(LUIWarband)
+	elseif LUIWarband then
+		LUIWarband:Hide()
+	end
 end
 
 function module.CloseBank()
@@ -324,8 +399,9 @@ function module.CloseBank()
 		hasBankOpenBags = false
 	end
 	if LUIBank then
-		LUIBank:Close()
+		LUIBank:Hide()
+	end
+	if LUIWarband then
+		LUIWarband:Hide()
 	end
 end
-
-module.BankContainer = Bank

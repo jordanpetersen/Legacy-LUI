@@ -59,6 +59,26 @@ module.defaults = {
 			Y = 0,
 			ActiveTab = nil, -- CharacterBankTab bag ID last selected
 		},
+		Warband = {
+			Lock = false,
+			RowSize = 14,
+			Padding = 8,
+			Spacing = 4,
+			Scale = 1,
+			BagBar = true,
+			ItemQuality = true,
+			ItemLevel = true,
+			BagNewline = false,
+			ShowNew = false,
+			ShowQuest = true,
+			ShowOverlay = true,
+			BackgroundTexture = "Blizzard Tooltip",
+			BorderTexture = "Stripped_medium",
+			BorderSize = 5,
+			X = 400,
+			Y = 0,
+			ActiveTab = nil, -- AccountBankTab bag ID last selected
+		},
 		-- Reagent bank frame removed in 11.2; reagent-capable character tabs replace it.
 		-- Kept empty shell so old profiles migrate without AceDB errors.
 		Reagent = {
@@ -125,6 +145,7 @@ function module:OnEnable()
 
 	tinsert(UISpecialFrames, "LUIBags")
 	tinsert(UISpecialFrames, "LUIBank")
+	tinsert(UISpecialFrames, "LUIWarband")
 
 	-- Prevent Blizzard bank UI from fighting LUI while the module is enabled.
 	if _G.BankFrame then
@@ -135,14 +156,21 @@ end
 
 function module:OnBankTabSettingsUpdated(event, bankType)
 	local characterType = Enum.BankType and Enum.BankType.Character or 0
+	local accountType = Enum.BankType and Enum.BankType.Account or 2
 	if LUIBank and (bankType == nil or bankType == characterType) then
 		LUIBank:BankTabsUpdated()
+	end
+	if LUIWarband and (bankType == nil or bankType == accountType) then
+		LUIWarband:BankTabsUpdated()
 	end
 end
 
 function module:OnBankBagSlotsChanged()
 	if LUIBank and LUIBank:IsShown() then
 		LUIBank:BankTabsUpdated()
+	end
+	if LUIWarband and LUIWarband:IsShown() then
+		LUIWarband:BankTabsUpdated()
 	end
 end
 
