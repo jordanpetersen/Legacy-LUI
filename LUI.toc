@@ -87,12 +87,12 @@ modules\bags\backpack.lua
 modules\tooltip\tooltip.lua
 
 ### InfoText ###
-modules\InfoText\infotext_init.lua
-modules\InfoText\infotext.lua
+modules\infotext\infotext_init.lua
+modules\infotext\infotext.lua
 modules\infotext\infotip.lua
-modules\InfoText\bags.lua
-modules\InfoText\clock.lua
-modules\InfoText\currency.lua
+modules\infotext\bags.lua
+modules\infotext\clock.lua
+modules\infotext\currency.lua
 modules\infotext\dualspec.lua
 modules\infotext\durability.lua
 modules\infotext\equipmentsets.lua

@@ -33,7 +33,10 @@ local function GenerateModuleButtons()
 						elseif mod.Toggle then mod:Toggle()
 						end
 						mod:ModPrint( (mod:IsEnabled()) and L["API_BtnEnabled"] or L["API_BtnDisabled"])
-						StaticPopup_Show("RELOAD_UI")
+						-- Most modules still need a reload; Bags unhooks cleanly on disable.
+						if not mod.skipReloadOnToggle then
+							StaticPopup_Show("RELOAD_UI")
+						end
 					end
 				end
 			})

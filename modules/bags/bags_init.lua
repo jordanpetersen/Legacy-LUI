@@ -13,6 +13,8 @@ local LUI = select(2, ...)
 local module = LUI:NewModule("Bags", "AceHook-3.0")
 
 module.enableButton = true
+-- Bags OnDisable unhooks bag APIs; no ReloadUI required from Control Panel.
+module.skipReloadOnToggle = true
 
 -- ####################################################################################################################
 -- ##### Default Settings #############################################################################################
@@ -143,8 +145,10 @@ end
 
 function module:OnDisable()
 	_G.CloseAllBags()
+	-- Undo ToggleBag / OpenBag hooks so Blizzard bags work without ReloadUI.
+	module:UnhookAll()
 
-	-- Bank
+	-- Bank (re-enable when CharacterBankTab / Warband UI is restored)
 	-- _G.BankFrame:RegisterEvent("BANKFRAME_OPENED")
 	-- _G.BankFrame:RegisterEvent("BANKFRAME_CLOSED")
 end
