@@ -141,13 +141,52 @@ end
 -- ##### Sidebar Adjust Logics ########################################################################################
 -- ####################################################################################################################
 
-function SidebarMixin:AutoAdjust()
-	if C_AddOns.IsAddOnLoaded("Bartender4") then
-		self:BT4Adjust()
+--- Compute a drawer-aligned position for the anchored bar (UIParent coords).
+---@return number|nil barX
+---@return number|nil barY
+---@return string|nil point
+---@return number|nil scale
+function SidebarMixin:GetRecommendedBarPosition()
+	local _, _, _, x, y = self:GetPoint()
+	local texLeft, texBottom, texWidth, texHeight = self:GetRect()
+	local drawLeft, drawBottom, drawWidth, drawHeight = self.Drawer:GetRect()
+	if not x or not texWidth or not drawWidth then return end
+
+	local barScale = self:GetEffectiveScale()
+	local uiScale = UIParent:GetScale()
+	if not uiScale or uiScale == 0 then return end
+
+	-- X is relative to the sidebar artwork; drawer width needs a 62.5% inset into the panel.
+	local texOffset = (self.side == "Right") and texWidth or 0
+	local barX = (x - texOffset - drawWidth * 0.625) / uiScale * barScale
+	local barY = (y + drawHeight * 0.41) / uiScale * barScale
+	local point = (self.side == "Right") and "RIGHT" or "LEFT"
+	return barX, barY, point, barScale
+end
+
+--- Session-only: move the live anchor frame into the drawer. Does not write SavedVariables.
+function SidebarMixin:AlignAnchorFrame()
+	if InCombatLockdown() then return end
+	local bar = _G[self.db.Anchor]
+	if not bar then return end
+
+	local barX, barY, point, scale = self:GetRecommendedBarPosition()
+	if not barX then return end
+
+	bar:ClearAllPoints()
+	bar:SetPoint(point, UIParent, point, barX, barY)
+	if scale and bar.SetScale then
+		bar:SetScale(scale)
 	end
 end
 
-function SidebarMixin:BT4Adjust()
+--- Align the live frame only (no Bartender profile mutation). Works for any Anchor frame.
+function SidebarMixin:AutoAdjust()
+	self:AlignAnchorFrame()
+end
+
+--- One-shot: persist drawer layout into the current Bartender4 profile (user-initiated).
+function SidebarMixin:ApplyToBartender()
 	if not C_AddOns.IsAddOnLoaded("Bartender4") or not (strsub(self.db.Anchor, 1, 3) == "BT4") then return end
 	local _, num = strsplit("r", self.db.Anchor)
 	num = tonumber(num)
@@ -156,25 +195,20 @@ function SidebarMixin:BT4Adjust()
 	local barOpt = Bartender4.db:GetNamespace("ActionBars").profile.actionbars[num]
 	if not barOpt then return end
 
-	local _, _, _, x, y = self:GetPoint()
-	local _, _, texWidth = self:GetRect()
-	local _, _, drawWidth, drawHeight = self.Drawer:GetRect()
-
-	local barScale = self:GetEffectiveScale()
-	local uiScale = UIParent:GetScale()
-
-	local texOffset = (self.side == "Right") and texWidth or 0
-	local barX = (x - texOffset - drawWidth * 0.625) / uiScale * barScale
-	local barY = (y + drawHeight * 0.41) / uiScale * barScale
+	local barX, barY, point, scale = self:GetRecommendedBarPosition()
+	if not barX then return end
 
 	barOpt.enabled = self.db.Enable
 	barOpt.buttons = 12
 	barOpt.rows = 6
 	barOpt.alpha = 1
+	if not barOpt.position then
+		barOpt.position = {}
+	end
 	barOpt.position.x = barX
 	barOpt.position.y = barY
-	barOpt.position.point = (self.side == "Right") and "RIGHT" or "LEFT"
-	barOpt.position.scale = barScale
+	barOpt.position.point = point
+	barOpt.position.scale = scale
 	Bartender4:UpdateModuleConfigs()
 end
 
