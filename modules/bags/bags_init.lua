@@ -117,10 +117,10 @@ function module:OnEnable()
 	module:RawHook("ToggleBag", function(id)
 		if id > 5 then origToggleBag(id)
 		else module.ToggleBags(id)
-		end 
+		end
 	end, true)
 	module:RawHook("ToggleBackpack", module.ToggleBags, true)
-	module:RawHook("OpenAllBags",    module.ToggleBags, true)
+	module:RawHook("OpenAllBags",    module.OpenBags, true)
 	module:RawHook("ToggleAllBags",  module.ToggleBags, true)
 	module:RawHook("OpenBackpack",   module.OpenBags,   true)
 	module:RawHook("OpenBag",        module.OpenBags,   true)
