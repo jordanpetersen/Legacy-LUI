@@ -265,30 +265,27 @@ local function UnitFrame_OnLeave(self)
 	self.Highlight:Hide()
 end
 
+-- StatusBar / FontString accept secret values; Lua arithmetic and AbbreviateNumbers do not.
+local function FormatUnitNumber(value, short)
+	if short and not (issecretvalue and issecretvalue(value)) then
+		return AbbreviateNumbers(value)
+	end
+	return value
+end
+
 local function OverrideHealth(self, event, unit, powerType)
 	if self.unit ~= unit then return end
 	local health = self.Health
 
-	local rawCurrent = UnitHealth(unit)
-	local rawMax = UnitHealthMax(unit)
-	local current = LUI:SecretSafe(rawCurrent, health._lastCurrent)
-	local max = LUI:SecretSafe(rawMax, health._lastMax or 1)
-	if current ~= nil and not (issecretvalue and issecretvalue(rawCurrent)) then
-		health._lastCurrent = current
-	end
-	if max ~= nil and not (issecretvalue and issecretvalue(rawMax)) then
-		health._lastMax = max
-	end
-	current = current or 0
-	max = max or 1
+	-- Pass UnitHealth* straight into widgets; do not blank when secret.
+	local current = UnitHealth(unit)
+	local max = UnitHealthMax(unit)
 
 	local unitConnected = UnitIsConnected(unit)
 	local disconnected = not LUI:SecretSafe(unitConnected, true)
 
 	health:SetMinMaxValues(0, max)
-	if not (issecretvalue and issecretvalue(rawCurrent)) and not (issecretvalue and issecretvalue(rawMax)) then
-		health:SetValue(disconnected and max or current)
-	end
+	health:SetValue(disconnected and max or current)
 
 	health.disconnected = disconnected
 
@@ -320,13 +317,19 @@ local function OverrideHealth(self, event, unit, powerType)
 	elseif health.color == "Individual" then
 		healthColorTex:SetVertexColor(r, g, b)
 	else
-		r, g, b = LUI:SecretSafeColorRGB(gradientColor, r, g, b)
-		healthColorTex:SetVertexColor(r, g, b)
+		-- Gradient ColorMixin may itself be secret; SetVertexColor accepts secrets.
+		if gradientColor and gradientColor.GetRGB then
+			healthColorTex:SetVertexColor(gradientColor:GetRGB())
+		else
+			r, g, b = LUI:SecretSafeColorRGB(gradientColor, r, g, b)
+			healthColorTex:SetVertexColor(r, g, b)
+		end
 	end
 
 	local tapped = health.colorTapping and UnitIsTapDenied and LUI:SecretSafe(UnitIsTapDenied(unit), false)
 	if tapped then healthColorTex:SetVertexColor(unpack(module.db.profile.Colors.Misc["Tapped"])) end
 
+	-- Background multiplier needs readable RGB; fall back when vertex color args are secret.
 	r = LUI:SecretSafe(r, 0.5)
 	g = LUI:SecretSafe(g, 0.5)
 	b = LUI:SecretSafe(b, 0.5)
@@ -342,7 +345,6 @@ local function OverrideHealth(self, event, unit, powerType)
 	local unitGhost = UnitIsGhost(unit)
 	local unitDead = UnitIsDead(unit)
 	local unitAFK = UnitIsAFK(unit)
-	local valuesSecret = (issecretvalue and issecretvalue(rawCurrent)) or (issecretvalue and issecretvalue(rawMax))
 
 	if not issecretvalue(unitConnected) and not unitConnected then
 		health:SetValue(0)
@@ -359,42 +361,35 @@ local function OverrideHealth(self, event, unit, powerType)
 		health.value:SetText(health.value.ShowDead and "|cffD7BEA5<Dead>|r" or "")
 		health.valuePercent:SetText(health.valuePercent.ShowDead and "|cffD7BEA5<Dead>|r" or "")
 		health.valueMissing:SetText("")
-	elseif valuesSecret then
-		-- Keep last safe bar value; clear text that would format secret numbers.
-		health.value:SetText("")
-		health.valuePercent:SetText("")
-		health.valueMissing:SetText("")
 	else
+		-- Percent / alpha curves may return secrets; pass them into FontString APIs directly.
 		local healthPercent = UnitHealthPercent(unit, false, PercentCurve)
 		local notFullAlpha = UnitHealthPercent(unit, true, NotFullCurve)
-		healthPercent = LUI:SecretSafe(healthPercent, 0)
-		notFullAlpha = LUI:SecretSafe(notFullAlpha, 1)
 
 		-- Raid Name Text, if health is not full, hide it
 		if self.Info.OnlyWhenFull then
-			local fullHealthAlpha = LUI:SecretSafe(UnitHealthPercent(unit, false, IsFullCurve), 1)
-			self.Info:SetAlpha(fullHealthAlpha)
+			self.Info:SetAlpha(UnitHealthPercent(unit, false, IsFullCurve))
 		else
 			self.Info:SetAlpha(1)
 		end
-		
+
 		if health.value.Enable == true then
 			if health.value.Format == "Absolut" then
 				health.value:SetFormattedText("%s/%s", current, max)
 			elseif health.value.Format == "Absolut & Percent" then
 				health.value:SetFormattedText("%s/%s | %.1f%%", current, max, healthPercent)
 			elseif health.value.Format == "Absolut Short" then
-				health.value:SetFormattedText("%s/%s", AbbreviateNumbers(current), AbbreviateNumbers(max))
+				health.value:SetFormattedText("%s/%s", FormatUnitNumber(current, true), FormatUnitNumber(max, true))
 			elseif health.value.Format == "Absolut Short & Percent" then
-				health.value:SetFormattedText("%s/%s | %.1f%%", AbbreviateNumbers(current),AbbreviateNumbers(max), healthPercent)
+				health.value:SetFormattedText("%s/%s | %.1f%%", FormatUnitNumber(current, true), FormatUnitNumber(max, true), healthPercent)
 			elseif health.value.Format == "Standard" then
 				health.value:SetFormattedText("%s", current)
 			elseif health.value.Format == "Standard & Percent" then
 				health.value:SetFormattedText("%s | %.1f%%", current, healthPercent)
 			elseif health.value.Format == "Standard Short" then
-				health.value:SetFormattedText("%s", AbbreviateNumbers(current))
+				health.value:SetFormattedText("%s", FormatUnitNumber(current, true))
 			elseif health.value.Format == "Standard Short & Percent" then
-				health.value:SetFormattedText("%s | %.1f%%", AbbreviateNumbers(current), healthPercent)
+				health.value:SetFormattedText("%s | %.1f%%", FormatUnitNumber(current, true), healthPercent)
 			else
 				health.value:SetFormattedText("%s", current)
 			end
@@ -403,6 +398,8 @@ local function OverrideHealth(self, event, unit, powerType)
 				health.value:SetTextColor(unpack(color))
 			elseif health.value.color == "Individual" then
 				health.value:SetTextColor(health.value.colorIndividual.r, health.value.colorIndividual.g, health.value.colorIndividual.b)
+			elseif gradientColor and gradientColor.GetRGB then
+				health.value:SetTextColor(gradientColor:GetRGB())
 			else
 				local gr, gg, gb = LUI:SecretSafeColorRGB(gradientColor, 1, 1, 1)
 				health.value:SetTextColor(gr, gg, gb)
@@ -424,6 +421,8 @@ local function OverrideHealth(self, event, unit, powerType)
 				health.valuePercent:SetTextColor(unpack(color))
 			elseif health.valuePercent.color == "Individual" then
 				health.valuePercent:SetTextColor(health.valuePercent.colorIndividual.r, health.valuePercent.colorIndividual.g, health.valuePercent.colorIndividual.b)
+			elseif gradientColor and gradientColor.GetRGB then
+				health.valuePercent:SetTextColor(gradientColor:GetRGB())
 			else
 				local gr, gg, gb = LUI:SecretSafeColorRGB(gradientColor, 1, 1, 1)
 				health.valuePercent:SetTextColor(gr, gg, gb)
@@ -439,12 +438,18 @@ local function OverrideHealth(self, event, unit, powerType)
 		end
 
 		if health.valueMissing.Enable == true then
-			local healthMissing = LUI:SecretSafe(UnitHealthMissing(unit), nil)
-
-			if healthMissing == nil then
-				health.valueMissing:SetText("")
+			local healthMissing = UnitHealthMissing(unit)
+			if C_StringUtil and C_StringUtil.TruncateWhenZero then
+				local truncated = C_StringUtil.TruncateWhenZero(healthMissing)
+				if truncated == nil or truncated == "" then
+					health.valueMissing:SetText("")
+				elseif health.valueMissing.ShortValue == true then
+					health.valueMissing:SetFormattedText("-%s", FormatUnitNumber(healthMissing, true))
+				else
+					health.valueMissing:SetFormattedText("-%s", truncated)
+				end
 			elseif health.valueMissing.ShortValue == true then
-				health.valueMissing:SetFormattedText("-%s", AbbreviateNumbers(healthMissing))
+				health.valueMissing:SetFormattedText("-%s", FormatUnitNumber(healthMissing, true))
 			else
 				health.valueMissing:SetFormattedText("-%s", healthMissing)
 			end
@@ -453,6 +458,8 @@ local function OverrideHealth(self, event, unit, powerType)
 				health.valueMissing:SetTextColor(unpack(color))
 			elseif health.valueMissing.color == "Individual" then
 				health.valueMissing:SetTextColor(health.valueMissing.colorIndividual.r, health.valueMissing.colorIndividual.g, health.valueMissing.colorIndividual.b)
+			elseif gradientColor and gradientColor.GetRGB then
+				health.valueMissing:SetTextColor(gradientColor:GetRGB())
 			else
 				local gr, gg, gb = LUI:SecretSafeColorRGB(gradientColor, 1, 1, 1)
 				health.valueMissing:SetTextColor(gr, gg, gb)
@@ -470,21 +477,19 @@ local function OverrideHealth(self, event, unit, powerType)
 
 	if not issecretvalue(unitAFK) and unitAFK then
 		if health.value.ShowDead == true then
-			if health.value:GetText() then
-				--if not strfind(health.value:GetText(), "AFK") then
-					health.value:SetFormattedText("|cffffffff<AFK>|r %s", health.value:GetText())
-				--end
-			else
-				health.value:SetText("|cffffffff<AFK>|r)")
+			local ok, text = pcall(health.value.GetText, health.value)
+			if ok and text and not (issecretvalue and issecretvalue(text)) then
+				health.value:SetFormattedText("|cffffffff<AFK>|r %s", text)
+			elseif not ok or not text then
+				health.value:SetText("|cffffffff<AFK>|r")
 			end
 		end
 
 		if health.valuePercent.ShowDead == true then
-			if health.valuePercent:GetText() then
-				--if not strfind(health.valuePercent:GetText(), "AFK") then
-					health.valuePercent:SetFormattedText("|cffffffff<AFK>|r %s", health.valuePercent:GetText())
-				--end
-			else
+			local ok, text = pcall(health.valuePercent.GetText, health.valuePercent)
+			if ok and text and not (issecretvalue and issecretvalue(text)) then
+				health.valuePercent:SetFormattedText("|cffffffff<AFK>|r %s", text)
+			elseif not ok or not text then
 				health.valuePercent:SetText("|cffffffff<AFK>|r")
 			end
 		end
@@ -496,25 +501,13 @@ local function OverridePower(self, event, unit)
 	local power = self.Power
 
 	local displayType = GetDisplayPower(power, unit)
-	local rawCurrent = UnitPower(unit, displayType)
-	local rawMax = UnitPowerMax(unit, displayType)
-	local current = LUI:SecretSafe(rawCurrent, power._lastCurrent)
-	local max = LUI:SecretSafe(rawMax, power._lastMax or 1)
-	if current ~= nil and not (issecretvalue and issecretvalue(rawCurrent)) then
-		power._lastCurrent = current
-	end
-	if max ~= nil and not (issecretvalue and issecretvalue(rawMax)) then
-		power._lastMax = max
-	end
-	current = current or 0
-	max = max or 1
+	local current = UnitPower(unit, displayType)
+	local max = UnitPowerMax(unit, displayType)
 
 	local disconnected = not LUI:SecretSafe(UnitIsConnected(unit), true)
 
 	power:SetMinMaxValues(0, max)
-	if not (issecretvalue and issecretvalue(rawCurrent)) and not (issecretvalue and issecretvalue(rawMax)) then
-		power:SetValue(disconnected and max or current)
-	end
+	power:SetValue(disconnected and max or current)
 
 	power.disconnected = disconnected
 
@@ -534,8 +527,6 @@ local function OverridePower(self, event, unit)
 		powerColorTex:SetVertexColor(r, g, b)
 	elseif power.color == "Individual" then
 		powerColorTex:SetVertexColor(r, g, b)
-	-- elseif unit == unit:match("boss%d") and select(7, UnitAlternatePowerInfo(unit)) then
-	-- 	powerColorTex:SetVertexColor(r, g, b)
 	else
 		if color2 then r, g, b = unpack(color2) end
 		powerColorTex:SetVertexColor(r, g, b)
@@ -553,8 +544,6 @@ local function OverridePower(self, event, unit)
 		power.bg:SetVertexColor(r*mu, g*mu, b*mu)
 	end
 
-	local valuesSecret = (issecretvalue and issecretvalue(rawCurrent)) or (issecretvalue and issecretvalue(rawMax))
-
 	if not issecretvalue(UnitIsConnected(unit)) and not UnitIsConnected(unit) then
 		power:SetValue(0)
 		power.valueMissing:SetText("")
@@ -570,32 +559,28 @@ local function OverridePower(self, event, unit)
 		power.valueMissing:SetText("")
 		power.valuePercent:SetText("")
 		power.value:SetText("")
-	elseif valuesSecret then
-		power.valueMissing:SetText("")
-		power.valuePercent:SetText("")
-		power.value:SetText("")
 	else
-		local powerPercent = LUI:SecretSafe(UnitPowerPercent(unit, pType, false, PercentCurve), 0)
-	
+		local powerPercent = UnitPowerPercent(unit, pType, false, PercentCurve)
+
 		if power.value.Enable == true then
 			if power.value.Format == "Absolut" then
-				power.value:SetFormattedText("%d/%d", current, max)
+				power.value:SetFormattedText("%s/%s", current, max)
 			elseif power.value.Format == "Absolut & Percent" then
-				power.value:SetFormattedText("%d/%d | %.1f%%", current, max, powerPercent)
+				power.value:SetFormattedText("%s/%s | %.1f%%", current, max, powerPercent)
 			elseif power.value.Format == "Absolut Short" then
-				power.value:SetFormattedText("%s/%s", AbbreviateNumbers(current), AbbreviateNumbers(max))
+				power.value:SetFormattedText("%s/%s", FormatUnitNumber(current, true), FormatUnitNumber(max, true))
 			elseif power.value.Format == "Absolut Short & Percent" then
-				power.value:SetFormattedText("%s/%s | %.1f%%", AbbreviateNumbers(current), AbbreviateNumbers(max), powerPercent)
+				power.value:SetFormattedText("%s/%s | %.1f%%", FormatUnitNumber(current, true), FormatUnitNumber(max, true), powerPercent)
 			elseif power.value.Format == "Standard" then
-				power.value:SetFormattedText("%d", current)
+				power.value:SetFormattedText("%s", current)
 			elseif power.value.Format == "Standard & Percent" then
-				power.value:SetFormattedText("%d | %.1f%%", current, powerPercent)
+				power.value:SetFormattedText("%s | %.1f%%", current, powerPercent)
 			elseif power.value.Format == "Standard Short" then
-				power.value:SetFormattedText("%s", AbbreviateNumbers(current))
-			elseif power.value.Format == "Standard Short" then
-				power.value:SetFormattedText("%s | %.1f%%", AbbreviateNumbers(current), powerPercent)
+				power.value:SetFormattedText("%s", FormatUnitNumber(current, true))
+			elseif power.value.Format == "Standard Short & Percent" then
+				power.value:SetFormattedText("%s | %.1f%%", FormatUnitNumber(current, true), powerPercent)
 			else
-				power.value:SetFormattedText("%d", current)
+				power.value:SetFormattedText("%s", current)
 			end
 
 			if power.value.color == "By Class" then
@@ -612,9 +597,8 @@ local function OverridePower(self, event, unit)
 			powerCurve:AddPoint(0.001, 1)
 			powerCurve:AddPoint(0.999, 1)
 			powerCurve:AddPoint(1, power.value.ShowFull and 1 or 0)
-			
-			local powerAlpha = LUI:SecretSafe(UnitPowerPercent(unit, pType, false, powerCurve), 1)
-			power.value:SetAlpha(powerAlpha)
+
+			power.value:SetAlpha(UnitPowerPercent(unit, pType, false, powerCurve))
 		else
 			power.value:SetText("")
 		end
@@ -636,22 +620,27 @@ local function OverridePower(self, event, unit)
 			powerCurve:AddPoint(0.001, 1)
 			powerCurve:AddPoint(0.999, 1)
 			powerCurve:AddPoint(1, power.valuePercent.ShowFull and 1 or 0)
-			
-			local powerAlpha = LUI:SecretSafe(UnitPowerPercent(unit, pType, false, powerCurve), 1)
-			power.valuePercent:SetAlpha(powerAlpha)
+
+			power.valuePercent:SetAlpha(UnitPowerPercent(unit, pType, false, powerCurve))
 		else
 			power.valuePercent:SetText("")
 		end
 
 		if power.valueMissing.Enable == true then
-			local powerMissing = LUI:SecretSafe(UnitPowerMissing(unit, pType), nil)
-
-			if powerMissing == nil then
-				power.valueMissing:SetText("")
+			local powerMissing = UnitPowerMissing(unit, pType)
+			if C_StringUtil and C_StringUtil.TruncateWhenZero then
+				local truncated = C_StringUtil.TruncateWhenZero(powerMissing)
+				if truncated == nil or truncated == "" then
+					power.valueMissing:SetText("")
+				elseif power.valueMissing.ShortValue == true then
+					power.valueMissing:SetFormattedText("-%s", FormatUnitNumber(powerMissing, true))
+				else
+					power.valueMissing:SetFormattedText("-%s", truncated)
+				end
 			elseif power.valueMissing.ShortValue == true then
-				power.valueMissing:SetFormattedText("-%s", AbbreviateNumbers(powerMissing))
+				power.valueMissing:SetFormattedText("-%s", FormatUnitNumber(powerMissing, true))
 			else
-				power.valueMissing:SetFormattedText("-%d", powerMissing)
+				power.valueMissing:SetFormattedText("-%s", powerMissing)
 			end
 
 			if power.valueMissing.color == "By Class" then
@@ -668,9 +657,8 @@ local function OverridePower(self, event, unit)
 			powerCurve:AddPoint(0.001, 1)
 			powerCurve:AddPoint(0.999, 1)
 			powerCurve:AddPoint(1, power.valueMissing.ShowFull and 1 or 0)
-			
-			local powerAlpha = LUI:SecretSafe(UnitPowerPercent(unit, pType, false, powerCurve), 1)
-			power.valueMissing:SetAlpha(powerAlpha)
+
+			power.valueMissing:SetAlpha(UnitPowerPercent(unit, pType, false, powerCurve))
 		else
 			power.valueMissing:SetText("")
 		end
