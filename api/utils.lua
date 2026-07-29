@@ -311,11 +311,27 @@ end
 -- To rectify this behaviour, you should set your UI scale so that your screen height matches with the UI coordinates.
 
 local mult = 1
+local GetPhysicalScreenSize = _G.GetPhysicalScreenSize
+local tonumber = _G.tonumber
 
 --- Updates the scale factor for Scaling calculations. Only needs to be called at login or when resolution changes.
 function LUI:UpdateScaleMultiplier()
-	local screenHeight = string.match(GetCVar("gxWindowedResolution"), "%d+x(%d+)")
+	-- gxWindowedResolution may be "auto" (no WxH match); prefer physical screen size.
+	local screenHeight
+	local resolution = GetCVar and GetCVar("gxWindowedResolution")
+	if resolution then
+		screenHeight = tonumber(string.match(resolution, "%d+x(%d+)"))
+	end
+	if not screenHeight and GetPhysicalScreenSize then
+		local _, physicalHeight = GetPhysicalScreenSize()
+		screenHeight = physicalHeight
+	end
+	screenHeight = screenHeight or 1080
+
 	local uiScale = UIParent:GetScale()
+	if not uiScale or uiScale == 0 then
+		uiScale = 1
+	end
 	mult = 768 / screenHeight / uiScale
 end
 

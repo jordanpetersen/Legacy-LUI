@@ -116,6 +116,10 @@ modules\raidmenu\raidmenu_init.lua
 modules\raidmenu\raidmenu.xml
 modules\raidmenu\raidmenu.lua
 
+### MarkRoster (prototype) ###
+modules\markroster\markroster_init.lua
+modules\markroster\markroster.lua
+
 ### ExpBars ###
 modules\expbars\expbars_init.lua
 modules\expbars\expbars.lua

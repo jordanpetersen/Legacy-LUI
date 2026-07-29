@@ -24,6 +24,7 @@ Micromenu.lua
 Minimap.lua
 MirrorBar.lua
 Raidmenu.lua
+MarkRoster.lua
 Tooltip.lua
 UIElements.lua
 Unitframes.lua
