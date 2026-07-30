@@ -65,13 +65,15 @@ end
 function module:CreateSearchBar(container)
 	local db = module.db.profile.Bags
 
-	-- Search Text
+	-- Title / search label (bank windows use windowTitle; bags keep SEARCH)
 	local search = container:CreateFontString(nil, "OVERLAY", "GameFonthighlightLarge")
-	local searchText = module:ColorText(SEARCH, "Search")
+	local label = container.windowTitle or SEARCH
+	local searchText = module:ColorText(label, "Search")
 	search:SetPoint("TOPLEFT", container, db.Padding, -10)
 	search:SetPoint("TOPRIGHT", -40, 0)
 	search:SetJustifyH("LEFT")
 	search:SetText(searchText)
+	container.titleLabel = label
 
 	-- Search Editbox
 	local editbox = CreateFrame("EditBox", nil, container)
@@ -127,6 +129,9 @@ function module:CreateSearchBar(container)
 		container.clear:Hide()
 		container.editbox:ClearFocus()
 		container:ShowTitleBar()
+		if container.searchText and container.titleLabel then
+			container.searchText:SetText(module:ColorText(container.titleLabel, "Search"))
+		end
 		container:SearchReset()
 	end)
 

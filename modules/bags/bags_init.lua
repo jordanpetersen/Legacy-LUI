@@ -126,17 +126,29 @@ function module:OnEnable()
 
 	local origToggleBag = ToggleBag
 	module:RawHook("ToggleBag", function(id)
-		if id > 5 then origToggleBag(id)
-		else module.ToggleBags(id)
-		end 
+		if module.IsManagedBankBag and module:IsManagedBankBag(id) then
+			module:SuppressBlizzardBankUI()
+			return
+		end
+		if id and id > 5 then
+			origToggleBag(id)
+		else
+			module.ToggleBags(id)
+		end
 	end, true)
 	module:RawHook("ToggleBackpack", module.ToggleBags, true)
-	module:RawHook("OpenAllBags",    module.ToggleBags, true)
-	module:RawHook("ToggleAllBags",  module.ToggleBags, true)
-	module:RawHook("OpenBackpack",   module.OpenBags,   true)
-	module:RawHook("OpenBag",        module.OpenBags,   true)
-	module:SecureHook("CloseBackpack",  module.CloseBags,  true)
-	module:SecureHook("CloseAllBags",   module.CloseBags,  true)
+	module:RawHook("OpenAllBags", module.OpenBags, true)
+	module:RawHook("ToggleAllBags", module.ToggleBags, true)
+	module:RawHook("OpenBackpack", module.OpenBags, true)
+	module:RawHook("OpenBag", function(id)
+		if module.IsManagedBankBag and module:IsManagedBankBag(id) then
+			module:SuppressBlizzardBankUI()
+			return
+		end
+		module.OpenBags()
+	end, true)
+	module:SecureHook("CloseBackpack", module.CloseBags, true)
+	module:SecureHook("CloseAllBags", module.CloseBags, true)
 
 	module:RegisterEvent("BANKFRAME_OPENED", module.OpenBank)
 	module:RegisterEvent("BANKFRAME_CLOSED", module.CloseBank)
@@ -148,9 +160,7 @@ function module:OnEnable()
 	tinsert(UISpecialFrames, "LUIWarband")
 
 	-- Prevent Blizzard bank UI from fighting LUI while the module is enabled.
-	if _G.BankFrame then
-		_G.BankFrame:UnregisterAllEvents()
-	end
+	module:SuppressBlizzardBankUI()
 	_G.CloseAllBags()
 end
 

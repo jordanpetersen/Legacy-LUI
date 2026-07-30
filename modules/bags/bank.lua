@@ -41,6 +41,33 @@ local BANK_TYPE_ACCOUNT = Enum.BankType and Enum.BankType.Account or 2
 ---@field tabButtonFormat string
 ---@field cleanupButtonName string
 ---@field tabLabel string # Tooltip label prefix
+---@field windowTitle string # Title shown on the container
+
+local BagIndex = Enum.BagIndex or {}
+
+--- Prefer enum fields; fall back to documented retail indices (6-11 / 12-16).
+local CHARACTER_TAB_IDS = {
+	BagIndex.CharacterBankTab_1 or 6,
+	BagIndex.CharacterBankTab_2 or 7,
+	BagIndex.CharacterBankTab_3 or 8,
+	BagIndex.CharacterBankTab_4 or 9,
+	BagIndex.CharacterBankTab_5 or 10,
+	BagIndex.CharacterBankTab_6 or 11,
+}
+
+local ACCOUNT_TAB_IDS = {
+	BagIndex.AccountBankTab_1 or 12,
+	BagIndex.AccountBankTab_2 or 13,
+	BagIndex.AccountBankTab_3 or 14,
+	BagIndex.AccountBankTab_4 or 15,
+	BagIndex.AccountBankTab_5 or 16,
+}
+
+-- Blizzard "tab bag" containers (hold DNT bank-tab bag items) — hide these; LUI owns tabs.
+local BLIZZARD_TAB_BAG_IDS = {
+	BagIndex.Characterbanktab or BagIndex.CharacterBankTab or -2,
+	BagIndex.Accountbanktab or BagIndex.AccountBankTab or -3,
+}
 
 ---@param cfg TabbedBankConfig
 local function CreateTabbedBankContainer(cfg)
@@ -52,6 +79,7 @@ local function CreateTabbedBankContainer(cfg)
 		BAG_ID_LIST = bagIds,
 		name = cfg.name,
 		bankType = bankType,
+		windowTitle = cfg.windowTitle or cfg.tabLabel or cfg.name,
 		activeTabId = nil,
 		tabButtons = nil,
 	}
@@ -185,11 +213,18 @@ local function CreateTabbedBankContainer(cfg)
 		for i = 1, self.NUM_BAG_IDS do
 			local tabId = self.BAG_ID_LIST[i]
 			local name = format(cfg.tabButtonFormat, i)
-			local button = module:CreateSlot(name, self.bagsBar, "")
+			-- Empty template string is truthy; omit template so CreateSlot uses the default ItemButton template.
+			local button = module:CreateSlot(name, self.bagsBar)
 			button.tabId = tabId
 			button.tabIndex = i
 			button.container = self
-			button.icon = _G[name.."IconTexture"]
+			-- Keep ItemButton.icon; do not replace with a missing named global.
+			button.icon = button.icon or button.Icon or _G[name.."IconTexture"]
+			if module.itemBackdrop then
+				button:SetBackdrop(module.itemBackdrop)
+				button:SetBackdropColor(module:RGBA("ItemBackground"))
+				button:SetBackdropBorderColor(module:RGBA("Border"))
+			end
 			button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 			button:SetScript("OnClick", function(btn)
 				local bank = btn.container
@@ -314,18 +349,12 @@ end
 module.BankContainer = CreateTabbedBankContainer({
 	name = "Bank",
 	bankType = BANK_TYPE_CHARACTER,
-	bagIds = {
-		Enum.BagIndex.CharacterBankTab_1,
-		Enum.BagIndex.CharacterBankTab_2,
-		Enum.BagIndex.CharacterBankTab_3,
-		Enum.BagIndex.CharacterBankTab_4,
-		Enum.BagIndex.CharacterBankTab_5,
-		Enum.BagIndex.CharacterBankTab_6,
-	},
+	bagIds = CHARACTER_TAB_IDS,
 	slotNameFormat = "LUIBank_Item%d_%d",
 	tabButtonFormat = "LUIBank_Tab%d",
 	cleanupButtonName = "LUIBank_CleanUp",
 	tabLabel = "Bank Tab",
+	windowTitle = "Character Bank",
 })
 
 -- ####################################################################################################################
@@ -335,17 +364,12 @@ module.BankContainer = CreateTabbedBankContainer({
 module.WarbandContainer = CreateTabbedBankContainer({
 	name = "Warband",
 	bankType = BANK_TYPE_ACCOUNT,
-	bagIds = {
-		Enum.BagIndex.AccountBankTab_1,
-		Enum.BagIndex.AccountBankTab_2,
-		Enum.BagIndex.AccountBankTab_3,
-		Enum.BagIndex.AccountBankTab_4,
-		Enum.BagIndex.AccountBankTab_5,
-	},
+	bagIds = ACCOUNT_TAB_IDS,
 	slotNameFormat = "LUIWarband_Item%d_%d",
 	tabButtonFormat = "LUIWarband_Tab%d",
 	cleanupButtonName = "LUIWarband_CleanUp",
 	tabLabel = "Warband Tab",
+	windowTitle = "Warband Bank",
 })
 
 -- ####################################################################################################################
@@ -353,6 +377,43 @@ module.WarbandContainer = CreateTabbedBankContainer({
 -- ####################################################################################################################
 
 local hasBankOpenBags = false
+
+local function IsBlizzardTabBag(id)
+	if id == nil then return false end
+	for i = 1, #BLIZZARD_TAB_BAG_IDS do
+		if BLIZZARD_TAB_BAG_IDS[i] == id then
+			return true
+		end
+	end
+	return false
+end
+
+--- Hide Blizzard bank chrome + the Characterbanktab / Accountbanktab "main bag" containers.
+function module:SuppressBlizzardBankUI()
+	local frames = {
+		_G.BankFrame,
+		_G.BankPanel,
+		_G.AccountBankPanel,
+	}
+	for i = 1, #frames do
+		local frame = frames[i]
+		if frame then
+			frame:UnregisterAllEvents()
+			frame:Hide()
+			if frame.SetScript then
+				frame:SetScript("OnShow", function(f) f:Hide() end)
+			end
+		end
+	end
+
+	-- Close Blizzard's tab-bag containers if something opened them.
+	for i = 1, #BLIZZARD_TAB_BAG_IDS do
+		local bagId = BLIZZARD_TAB_BAG_IDS[i]
+		if bagId and _G.CloseBag then
+			_G.CloseBag(bagId)
+		end
+	end
+end
 
 local function RefreshBankContainer(frame)
 	if not frame then return end
@@ -372,6 +433,8 @@ function module:MaybeCloseBankInteraction()
 end
 
 function module.OpenBank()
+	module:SuppressBlizzardBankUI()
+
 	if LUIBags and not LUIBags:IsShown() then
 		hasBankOpenBags = true
 		LUIBags:Open()
@@ -391,6 +454,13 @@ function module.OpenBank()
 	elseif LUIWarband then
 		LUIWarband:Hide()
 	end
+
+	-- Second pass after Blizzard finishes opening its frames.
+	C_Timer.After(0, function()
+		if module:IsEnabled() then
+			module:SuppressBlizzardBankUI()
+		end
+	end)
 end
 
 function module.CloseBank()
@@ -405,3 +475,18 @@ function module.CloseBank()
 		LUIWarband:Hide()
 	end
 end
+
+-- Export helper for OpenBag / ToggleBag hook filtering.
+function module:IsManagedBankBag(id)
+	if id == nil then return false end
+	if IsBlizzardTabBag(id) then return true end
+	for i = 1, #CHARACTER_TAB_IDS do
+		if CHARACTER_TAB_IDS[i] == id then return true end
+	end
+	for i = 1, #ACCOUNT_TAB_IDS do
+		if ACCOUNT_TAB_IDS[i] == id then return true end
+	end
+	return false
+end
+
+module.IsBlizzardTabBag = IsBlizzardTabBag
