@@ -23,11 +23,190 @@ local BANK_BAG_PURCHASE = _G.BANK_BAG_PURCHASE
 local COSTS_LABEL = _G.COSTS_LABEL
 local ipairs = _G.ipairs
 local pairs = _G.pairs
+local CreateFrame = _G.CreateFrame
+local UIParent = _G.UIParent
+local UIDropDownMenu_CreateInfo = _G.UIDropDownMenu_CreateInfo
+local UIDropDownMenu_AddButton = _G.UIDropDownMenu_AddButton
+local UIDropDownMenu_Initialize = _G.UIDropDownMenu_Initialize
+local C_Timer = _G.C_Timer
 
 local BANK_SLOT_TEMPLATE = "ContainerFrameItemButtonTemplate"
 local REAGENT_FLAG = Enum.BagSlotFlags and Enum.BagSlotFlags.ClassReagents or 0x80
 local BANK_TYPE_CHARACTER = Enum.BankType and Enum.BankType.Character or 0
 local BANK_TYPE_ACCOUNT = Enum.BankType and Enum.BankType.Account or 2
+
+local BagSlotFlags = Enum.BagSlotFlags or {}
+local DEPOSIT_FLAG_OPTIONS = {
+	{ flag = BagSlotFlags.ClassReagents or 0x80, label = _G.BAG_FILTER_REAGENTS or "Reagents" },
+	{ flag = BagSlotFlags.ClassEquipment or 0x2, label = _G.BAG_FILTER_EQUIPMENT or "Equipment" },
+	{ flag = BagSlotFlags.ClassConsumables or 0x4, label = _G.BAG_FILTER_CONSUMABLES or "Consumables" },
+	{ flag = BagSlotFlags.ClassProfessionGoods or 0x8, label = _G.BAG_FILTER_PROFESSION_GOODS or "Profession Goods" },
+	{ flag = BagSlotFlags.ClassJunk or 0x10, label = _G.BAG_FILTER_JUNK or "Junk" },
+	{ flag = BagSlotFlags.ClassQuestItems or 0x20, label = _G.BAG_FILTER_QUEST_ITEMS or "Quest Items" },
+	{ flag = BagSlotFlags.ExpansionCurrent or 0x100, label = "Current Expansion" },
+	{ flag = BagSlotFlags.ExpansionLegacy or 0x200, label = "Legacy Expansion" },
+	{ flag = BagSlotFlags.DisableAutoSort or 0x1, label = _G.BAG_FILTER_IGNORE or "Ignore Clean Up" },
+}
+
+-- ####################################################################################################################
+-- ##### Tab settings helpers #########################################################################################
+-- ####################################################################################################################
+
+local tabMenuFrame
+local tabMenuBank
+local tabMenuTabId
+
+if not _G.StaticPopupDialogs["LUI_BANK_TAB_RENAME"] then
+	_G.StaticPopupDialogs["LUI_BANK_TAB_RENAME"] = {
+		text = "%s",
+		button1 = _G.ACCEPT,
+		button2 = _G.CANCEL,
+		hasEditBox = true,
+		maxLetters = 16,
+		OnShow = function(self, data)
+			local edit = self.GetEditBox and self:GetEditBox() or self.editBox
+			if edit and data and data.name then
+				edit:SetText(data.name)
+				edit:HighlightText()
+			end
+		end,
+		OnAccept = function(self, data)
+			if not data or not data.bank or not C_Bank or not C_Bank.UpdateBankTabSettings then return end
+			local edit = self.GetEditBox and self:GetEditBox() or self.editBox
+			local newName = edit and edit:GetText()
+			if not newName or newName == "" then return end
+			local tabData = data.bank:GetPurchasedTabDataByID()[data.tabId]
+			if not tabData then return end
+			C_Bank.UpdateBankTabSettings(data.bank.bankType, data.tabId, newName, tabData.icon, tabData.depositFlags or 0)
+			data.bank:UpdateTabBar()
+		end,
+		EditBoxOnEnterPressed = function(self)
+			local parent = self:GetParent()
+			local dialog = _G.StaticPopupDialogs[parent.which]
+			if dialog and dialog.OnAccept then
+				dialog.OnAccept(parent, parent.data)
+			end
+			parent:Hide()
+		end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
+end
+
+local function ToggleTabDepositFlag(bank, tabId, flag)
+	if not bank or not tabId or not flag or not C_Bank or not C_Bank.UpdateBankTabSettings then return end
+	local tabData = bank:GetPurchasedTabDataByID()[tabId]
+	if not tabData then return end
+	local flags = tabData.depositFlags or 0
+	if bit.band(flags, flag) ~= 0 then
+		flags = bit.band(flags, bit.bnot(flag))
+	else
+		flags = bit.bor(flags, flag)
+	end
+	C_Bank.UpdateBankTabSettings(bank.bankType, tabId, tabData.name, tabData.icon, flags)
+	bank:UpdateTabBar()
+end
+
+local function ShowBlizzardTabSettings(bank, tabId)
+	local panel = (bank.bankType == BANK_TYPE_ACCOUNT) and _G.AccountBankPanel or _G.BankPanel
+	local menu = panel and panel.TabSettingsMenu
+	if not menu then return false end
+
+	-- TabSettingsMenu can open without leaving the full Blizzard bank visible.
+	if menu.SetSelectedTab then
+		menu:SetSelectedTab(tabId)
+	elseif menu.selectedTabID ~= nil then
+		menu.selectedTabID = tabId
+	end
+	if menu.Update then
+		menu:Update()
+	end
+	menu:ClearAllPoints()
+	menu:SetPoint("LEFT", bank, "RIGHT", 12, 0)
+	-- Bypass BankPanel OnShow→Hide suppressor for this child if needed.
+	menu:SetParent(UIParent)
+	menu:Show()
+	menu:Raise()
+	return true
+end
+
+local function InitializeBankTabMenu(frame, level)
+	if level ~= 1 then return end
+	local bank, tabId = tabMenuBank, tabMenuTabId
+	if not bank or not tabId then return end
+	local tabData = bank:GetPurchasedTabDataByID()[tabId]
+	if not tabData then return end
+
+	local info = UIDropDownMenu_CreateInfo()
+
+	info.text = tabData.name or "Bank Tab"
+	info.isTitle = true
+	info.notCheckable = true
+	UIDropDownMenu_AddButton(info, level)
+
+	info = UIDropDownMenu_CreateInfo()
+	info.text = _G.EDIT or "Rename"
+	info.notCheckable = true
+	info.func = function()
+		local header = tabData.tabNameEditBoxHeader or "Rename Bank Tab"
+		_G.StaticPopup_Show("LUI_BANK_TAB_RENAME", header, nil, {
+			bank = bank,
+			tabId = tabId,
+			name = tabData.name,
+		})
+	end
+	UIDropDownMenu_AddButton(info, level)
+
+	info = UIDropDownMenu_CreateInfo()
+	info.text = "Deposit Filters"
+	info.isTitle = true
+	info.notCheckable = true
+	UIDropDownMenu_AddButton(info, level)
+
+	local flags = tabData.depositFlags or 0
+	for i = 1, #DEPOSIT_FLAG_OPTIONS do
+		local opt = DEPOSIT_FLAG_OPTIONS[i]
+		if opt.flag and opt.flag ~= 0 then
+			info = UIDropDownMenu_CreateInfo()
+			info.text = opt.label
+			info.checked = bit.band(flags, opt.flag) ~= 0
+			info.isNotRadio = true
+			info.func = function()
+				ToggleTabDepositFlag(bank, tabId, opt.flag)
+			end
+			UIDropDownMenu_AddButton(info, level)
+		end
+	end
+
+	if (_G.BankPanel and _G.BankPanel.TabSettingsMenu) or (_G.AccountBankPanel and _G.AccountBankPanel.TabSettingsMenu) then
+		info = UIDropDownMenu_CreateInfo()
+		info.text = " "
+		info.disabled = true
+		info.notCheckable = true
+		UIDropDownMenu_AddButton(info, level)
+
+		info = UIDropDownMenu_CreateInfo()
+		info.text = "Blizzard Tab Settings"
+		info.notCheckable = true
+		info.func = function()
+			ShowBlizzardTabSettings(bank, tabId)
+		end
+		UIDropDownMenu_AddButton(info, level)
+	end
+end
+
+local function OpenBankTabMenu(bank, tabId, anchor)
+	if not bank:IsTabPurchased(tabId) then return end
+	tabMenuBank = bank
+	tabMenuTabId = tabId
+	if not tabMenuFrame then
+		tabMenuFrame = CreateFrame("Frame", "LUIBankTabDropDown", UIParent, "UIDropDownMenuTemplate")
+	end
+	UIDropDownMenu_Initialize(tabMenuFrame, InitializeBankTabMenu, "MENU")
+	_G.ToggleDropDownMenu(1, nil, tabMenuFrame, anchor, 0, 0)
+end
 
 -- ####################################################################################################################
 -- ##### Shared tabbed-bank factory ###################################################################################
@@ -226,8 +405,14 @@ local function CreateTabbedBankContainer(cfg)
 				button:SetBackdropBorderColor(module:RGBA("Border"))
 			end
 			button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-			button:SetScript("OnClick", function(btn)
+			button:SetScript("OnClick", function(btn, mouseButton)
 				local bank = btn.container
+				if mouseButton == "RightButton" then
+					if bank:IsTabPurchased(btn.tabId) then
+						OpenBankTabMenu(bank, btn.tabId, btn)
+					end
+					return
+				end
 				if bank:IsTabPurchased(btn.tabId) then
 					bank:SetActiveTab(btn.tabId)
 				elseif C_Bank and C_Bank.CanPurchaseBankTab and C_Bank.CanPurchaseBankTab(bankType) then
@@ -242,6 +427,7 @@ local function CreateTabbedBankContainer(cfg)
 					if tabData.depositFlags and bit.band(tabData.depositFlags, REAGENT_FLAG) ~= 0 then
 						GameTooltip:AddLine("Reagents", 0.2, 0.8, 0.2)
 					end
+					GameTooltip:AddLine("Right-click to manage tab", 0.6, 0.6, 0.6)
 				elseif C_Bank and C_Bank.CanPurchaseBankTab and C_Bank.CanPurchaseBankTab(bankType) then
 					GameTooltip:SetText(BANK_BAG_PURCHASE or "Purchase Bank Tab")
 					if C_Bank.FetchNextPurchasableBankTabCost then
@@ -328,8 +514,12 @@ local function CreateTabbedBankContainer(cfg)
 				C_Container.SortBankBags()
 			end
 		end
-		local button = module:CreateCleanUpButton(cfg.cleanupButtonName, utilBar, sortFunc)
-		utilBar:AddNewButton(button)
+		local cleanUp = module:CreateCleanUpButton(cfg.cleanupButtonName, utilBar, sortFunc)
+		utilBar:AddNewButton(cleanUp)
+
+		local depositName = (cfg.name == "Warband") and "LUIWarband_Deposit" or "LUIBank_Deposit"
+		local deposit = module:CreateBankDepositButton(depositName, utilBar, bankType)
+		utilBar:AddNewButton(deposit)
 	end
 
 	function Bank:BankTabsUpdated()
