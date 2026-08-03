@@ -1,0 +1,28 @@
+1x [ADDON_ACTION_BLOCKED] AddOn 'LUI' tried to call the protected function 'GetGuildRosterMOTD()'.
+[!BugGrabber/BugGrabber.lua]:554: in function '?'
+[!BugGrabber/BugGrabber.lua]:538: in function <!BugGrabber/BugGrabber.lua:538>
+[C]: ?
+[LUI/modules/infotext/guild.lua]:255: in function 'OnEnter'
+[LUI/modules/infotext/infotext.lua]:255: in function <LUI/modules/infotext/infotext.lua:251>
+
+
+Locals:
+self=<table>
+event="ADDON_ACTION_BLOCKED"
+addonName="LUI"
+addonFunc="GetGuildRosterMOTD()"
+name="LUI"
+badAddons=<table>{
+ LUI=true
+}
+L=<table>{
+ NO_DISPLAY_2="|cffffff00The standard display is called BugSack, and can probably be found on the same site where you found !BugGrabber.|r"
+ ERROR_DETECTED="%s |cffffff00captured, click the link for more information.|r"
+ BUGGRABBER_STOPPED="|cffffff00There are too many errors in your UI. As a result, your game experience may be degraded. Disable or update the failing addons if you don't want to see this message again.|r"
+ USAGE="|cffffff00Usage: /buggrabber <1-%d>.|r"
+ STOP_NAG="|cffffff00!BugGrabber will not nag about missing a display addon again until next patch.|r"
+ NO_DISPLAY_STOP="|cffffff00If you don't want to be reminded about this again, run /stopnag.|r"
+ NO_DISPLAY_1="|cffffff00You seem to be running !BugGrabber with no display addon to go along with it. Although a slash command is provided for accessing error reports, a display can help you manage these errors in a more convenient way.|r"
+ ERROR_UNABLE="|cffffff00!BugGrabber is unable to retrieve errors from other players by itself. Please install BugSack or a similar display addon that might give you this functionality.|r"
+ ADDON_CALL_PROTECTED="[%s] AddOn '%s' tried to call the protected function '%s'."
+}
