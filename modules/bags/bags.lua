@@ -490,7 +490,10 @@ end
 ---@param template? string @ Frame template to use. Defaults to "ContainerFrameItemButtonTemplate"
 ---@return ItemButton
 function module:CreateSlot(name, parent, template)
-	local button = CreateFrame("ItemButton", name, parent, template or BUTTON_SLOT_TEMPLATE)
+	if not template or template == "" then
+		template = BUTTON_SLOT_TEMPLATE
+	end
+	local button = CreateFrame("ItemButton", name, parent, template)
 	Mixin(button, _G.BackdropTemplateMixin)
 	button:SetSize(BAG_TEXTURE_SIZE, BAG_TEXTURE_SIZE)
 	button:SetPushedTexture("")
@@ -502,17 +505,20 @@ function module:CreateSlot(name, parent, template)
 	end
 
 	--Make IconTexture not clash with our backdrop
-	local iconTex = _G[name.."IconTexture"]
-	SetItemButtonTexture(button)
-	if iconTex then
-		-- This removes the white/silver border found around many IconTextures
-		iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-		iconTex:SetPoint("TOPLEFT", button, 3, -3)
-		iconTex:SetPoint("BOTTOMRIGHT", button, -3, 3)
-		-- This prevent the IconTextures from appearing (partially) above our itemSlot backdrop
-		iconTex:SetDrawLayer("BORDER", -1)
-		iconTex:Show()
+	local iconTex = _G[name.."IconTexture"] or button.icon or button.Icon
+	if not iconTex then
+		iconTex = button:CreateTexture(name.."IconTexture", "BORDER")
+		iconTex:SetAllPoints(button)
 	end
+	button.icon = iconTex
+	SetItemButtonTexture(button)
+	-- This removes the white/silver border found around many IconTextures
+	iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	iconTex:SetPoint("TOPLEFT", button, 3, -3)
+	iconTex:SetPoint("BOTTOMRIGHT", button, -3, 3)
+	-- This prevent the IconTextures from appearing (partially) above our itemSlot backdrop
+	iconTex:SetDrawLayer("BORDER", -1)
+	iconTex:Show()
 
 	return button
 end
