@@ -143,7 +143,7 @@ function module:OnEnable()
 	module:RegisterEvent("BANKFRAME_OPENED", module.OpenBank)
 	module:RegisterEvent("BANKFRAME_CLOSED", module.CloseBank)
 	module:RegisterEvent("BANK_TAB_SETTINGS_UPDATED", "OnBankTabSettingsUpdated")
-	module:RegisterEvent("PLAYERBANKBAGSLOTS_CHANGED", "OnBankBagSlotsChanged")
+    module:RegisterEvent("PLAYERBANKSLOTS_CHANGED", "OnBankBagSlotsChanged")
 
 	tinsert(UISpecialFrames, "LUIBags")
 	tinsert(UISpecialFrames, "LUIBank")
