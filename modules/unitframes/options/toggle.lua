@@ -38,6 +38,47 @@ local iconlist = {
 	ReadyCheck = {"ReadyCheckIndicator"},
 }
 
+-- When LUI owns player-frame auras, keep Blizzard's Edit Mode buff/debuff bars hidden.
+local blizzardPlayerAuraHidden = false
+local blizzardPlayerAuraParent
+local blizzardPlayerAuraHooked = {}
+
+local function GetBlizzardPlayerAuraParent()
+	if not blizzardPlayerAuraParent then
+		blizzardPlayerAuraParent = CreateFrame("Frame", nil, UIParent)
+		blizzardPlayerAuraParent:SetAllPoints()
+		blizzardPlayerAuraParent:Hide()
+	end
+	return blizzardPlayerAuraParent
+end
+
+local function HideBlizzardPlayerAuraFrame(frame)
+	if not frame then return end
+	frame:UnregisterAllEvents()
+	frame:Hide()
+	frame:SetParent(GetBlizzardPlayerAuraParent())
+	if not blizzardPlayerAuraHooked[frame] then
+		hooksecurefunc(frame, "SetParent", function(self, parent)
+			if not blizzardPlayerAuraHidden then return end
+			if parent ~= GetBlizzardPlayerAuraParent() then
+				self:SetParent(GetBlizzardPlayerAuraParent())
+			end
+		end)
+		blizzardPlayerAuraHooked[frame] = true
+	end
+end
+
+function module:UpdateBlizzardPlayerAuras()
+	local aura = self.db and self.db.profile and self.db.profile.player and self.db.profile.player.Aura
+	local useLUI = aura and ((aura.Buffs and aura.Buffs.Enable) or (aura.Debuffs and aura.Debuffs.Enable))
+	blizzardPlayerAuraHidden = not not useLUI
+
+	if useLUI then
+		HideBlizzardPlayerAuraFrame(_G.BuffFrame)
+		HideBlizzardPlayerAuraFrame(_G.DebuffFrame)
+	end
+end
+
 local function GetOpposite(dir)
 	if dir == "RIGHT" then
 		return "LEFT"
@@ -967,6 +1008,10 @@ module.ApplySettings = function(unit)
 				else
 					frame:DisableElement("Auras")
 				end
+			end
+
+			if unit == "player" then
+				module:UpdateBlizzardPlayerAuras()
 			end
 
 			-- combat feedback text

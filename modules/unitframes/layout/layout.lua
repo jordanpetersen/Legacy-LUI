@@ -2236,8 +2236,8 @@ module.funcs = {
 		self.Buffs:ClearAllPoints()
 		self.Buffs:SetPoint(oufdb.Aura.Buffs.InitialAnchor, self, oufdb.Aura.Buffs.InitialAnchor, oufdb.Aura.Buffs.X, oufdb.Aura.Buffs.Y)
 		self.Buffs.initialAnchor = oufdb.Aura.Buffs.InitialAnchor
-		self.Buffs["growth-y"] = oufdb.Aura.Buffs.GrowthY
-		self.Buffs["growth-x"] = oufdb.Aura.Buffs.GrowthX
+		self.Buffs.growthY = oufdb.Aura.Buffs.GrowthY
+		self.Buffs.growthX = oufdb.Aura.Buffs.GrowthX
 		self.Buffs.onlyShowPlayer = oufdb.Aura.Buffs.PlayerOnly
 		self.Buffs.includePet = oufdb.Aura.Buffs.IncludePet
 		self.Buffs.showStealableBuffs = (unit ~= "player" and (LUI.MAGE or LUI.SHAMAN))
@@ -2274,8 +2274,8 @@ module.funcs = {
 		self.Debuffs:ClearAllPoints()
 		self.Debuffs:SetPoint(oufdb.Aura.Debuffs.InitialAnchor, self, oufdb.Aura.Debuffs.InitialAnchor, oufdb.Aura.Debuffs.X, oufdb.Aura.Debuffs.Y)
 		self.Debuffs.initialAnchor = oufdb.Aura.Debuffs.InitialAnchor
-		self.Debuffs["growth-y"] = oufdb.Aura.Debuffs.GrowthY
-		self.Debuffs["growth-x"] = oufdb.Aura.Debuffs.GrowthX
+		self.Debuffs.growthY = oufdb.Aura.Debuffs.GrowthY
+		self.Debuffs.growthX = oufdb.Aura.Debuffs.GrowthX
 		self.Debuffs.onlyShowPlayer = oufdb.Aura.Debuffs.PlayerOnly
 		self.Debuffs.includePet = oufdb.Aura.Debuffs.IncludePet
 		self.Debuffs.fadeOthers = oufdb.Aura.Debuffs.FadeOthers

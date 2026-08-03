@@ -718,11 +718,11 @@ function module:CreateAuraOptions(unit, order, type)
 			if _G[frame] then
 				module.funcs[type](_G[frame], _G[frame].__unit, self.db[unit])
 				if self.db[unit].Aura[type].Enable then
-					_G[frame]:EnableElement("Aura")
+					_G[frame]:EnableElement("Auras")
 					_G[frame][type]:Show()
 				else
 					if self.db[unit].Aura.Buffs.Enable == false and self.db[unit].Aura.Debuffs.Enable == false then
-						_G[frame]:DisableElement("Aura")
+						_G[frame]:DisableElement("Auras")
 					end
 					_G[frame][type]:Hide()
 				end

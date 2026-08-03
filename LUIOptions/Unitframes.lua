@@ -387,6 +387,7 @@ local function NewUnitOptionGroup(unit, order)
     
     if dbUnit.Aura.Buffs then
         unitOptions.args.Buffs = Opt:Group({name = "Buffs", db = dbUnit.Aura.Buffs, args = {
+            Enable = Opt:Toggle({name = "Enabled", width = "full"}),
             ColorByType = Opt:Toggle({name = "Color By Type"}),
             PlayerOnly = Opt:Toggle({name = "Player Only"}),
             IncludePet = Opt:Toggle({name = "Include Pet"}),
@@ -403,6 +404,7 @@ local function NewUnitOptionGroup(unit, order)
             Num = Opt:Slider({name = "Amount of Buffs", values = auraCountValues}),
         }})
         unitOptions.args.Debuffs = Opt:Group({name = "Debuffs", db = dbUnit.Aura.Debuffs, args = {
+            Enable = Opt:Toggle({name = "Enabled", width = "full"}),
             ColorByType = Opt:Toggle({name = "Color By Type"}),
             PlayerOnly = Opt:Toggle({name = "Player Only"}),
             IncludePet = Opt:Toggle({name = "Include Pet"}),
