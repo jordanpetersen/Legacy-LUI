@@ -126,7 +126,7 @@ end
 --Went with a return-less approach that you need to provide the sort table because otherwise,
 --I would need to create a new table every single call, and that would create needless garbage.\
 
---- Returns a sorted table to work it by filling the array portion of `sortT` with the keys of `origT`, then sorting the results.  
+--- Returns a sorted table to work it by filling the array portion of `sortT` with the keys of `origT`, then sorting the results.
 --- Then we can just use a loop to get the sorted results with original[ sorted[i] ] for the value.
 ---@param sortT table Table that will be wiped to contain the sorting order.
 ---@param origT table Original dictionary table that contains list of keys to be sorted.
@@ -316,22 +316,14 @@ local tonumber = _G.tonumber
 
 --- Updates the scale factor for Scaling calculations. Only needs to be called at login or when resolution changes.
 function LUI:UpdateScaleMultiplier()
-	-- gxWindowedResolution may be "auto" (no WxH match); prefer physical screen size.
-	local screenHeight
-	local resolution = GetCVar and GetCVar("gxWindowedResolution")
-	if resolution then
-		screenHeight = tonumber(string.match(resolution, "%d+x(%d+)"))
-	end
-	if not screenHeight and GetPhysicalScreenSize then
-		local _, physicalHeight = GetPhysicalScreenSize()
-		screenHeight = physicalHeight
-	end
-	screenHeight = screenHeight or 1080
-
+	local resolution = GetCVar("gxWindowedResolution")
+	local screenHeight = resolution and tonumber(string.match(resolution, "%d+x(%d+)"))
 	local uiScale = UIParent:GetScale()
-	if not uiScale or uiScale == 0 then
-		uiScale = 1
+
+	if not screenHeight or screenHeight == 0 then
+		screenHeight = UIParent:GetHeight()
 	end
+
 	mult = 768 / screenHeight / uiScale
 end
 

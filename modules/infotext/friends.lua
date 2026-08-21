@@ -11,6 +11,19 @@ local L = LUI.L
 ---@class LUI.Infotext
 local module = LUI:GetModule("Infotext")
 local element = module:NewElement("Friends", "AceEvent-3.0")
+StaticPopupDialogs["LUI_CONFIRM_REMOVE_BN_FRIEND"] = {
+	text = "Remove %s from your Battle.net friends list?",
+	button1 = YES,
+	button2 = NO,
+	OnAccept = function(self, data)
+		if data then
+			BNRemoveFriend(data)
+		end
+	end,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+}
 
 -- local copies
 local format, max = format, math.max
@@ -74,6 +87,7 @@ local onlineFriends = 0
 local totalBNFriends = 0
 local onlineBNFriends = 0
 local infotip
+local legendTip
 local onBlock
 
 --Add new Static Dialog, called once, no need to have local copies.
@@ -90,21 +104,17 @@ StaticPopupDialogs["SET_BN_BROADCAST"] = {
 	hasEditBox = 1,
 	maxLetters = 127,
 	OnAccept = function(self)
-		BNSetCustomMessage(self.editBox:GetText())
+		BNSetCustomMessage(self.EditBox:GetText())
 	end,
 	OnShow = function(self)
 		local _, _, _, currentBroadcast = BNGetInfo()
-		self.editBox:SetText(currentBroadcast)
-		self.editBox:SetFocus()
+		self.EditBox:SetText(currentBroadcast)
+		self.EditBox:SetFocus()
 	end,
-	--[[Not sure if those are needed with hideOnEscape and enterClicksFirstButton
-	EditBoxOnEnterPressed = function(self)
-		BNSetCustomMessage(self:GetText())
-		self:GetParent():Hide()
-	end,
+	
 	EditBoxOnEscapePressed = function(self)
 		self:GetParent():Hide()
-	end, --]]
+	end, 
 }
 
 -- ####################################################################################################################
@@ -118,9 +128,50 @@ function element:BuildTooltip()
 	infotip.Friends = {}
 end
 
+function element:BuildLegend()
+	if legendTip then return end
+
+	legendTip = CreateFrame("Frame", nil, UIParent, "TooltipBorderedFrameTemplate")
+	legendTip:SetSize(220, 120)
+	legendTip:SetFrameStrata("TOOLTIP")
+
+	legendTip.title = legendTip:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	legendTip.title:SetPoint("TOPLEFT", 12, -10)
+	legendTip.title:SetText("Friends")
+
+	legendTip.alt = legendTip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	legendTip.alt:SetPoint("TOPLEFT", legendTip.title, "BOTTOMLEFT", 0, -8)
+	legendTip.alt:SetText("Alt + Click     Invite")
+
+	legendTip.ctrl = legendTip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	legendTip.ctrl:SetPoint("TOPLEFT", legendTip.alt, "BOTTOMLEFT", 0, -5)
+	legendTip.ctrl:SetText("Ctrl + Click    Edit Note")
+
+	legendTip.middle = legendTip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	legendTip.middle:SetPoint("TOPLEFT", legendTip.ctrl, "BOTTOMLEFT", 0, -5)
+	legendTip.middle:SetText("Middle Click    Remove Friend")
+
+	legendTip.left = legendTip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	legendTip.left:SetPoint("TOPLEFT", legendTip.middle, "BOTTOMLEFT", 0, -5)
+	legendTip.left:SetText("Left Click      Player Whisper")
+
+	legendTip.scroll = legendTip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	legendTip.scroll:SetPoint("TOPLEFT", legendTip.left, "BOTTOMLEFT", 0, -5)
+	legendTip.scroll:SetText("Mouse Wheel     Scroll Friends")
+
+	legendTip:Hide()
+end
+
 function element:CreateBroadcast()
 	if infotip.broadcast then return infotip.broadcast end
 	local bc = infotip:NewLine()
+	bc:EnableMouse(true)
+	bc:SetScript("OnMouseUp", function(self, button)
+		if button == "LeftButton" then
+			StaticPopup_Show("SET_BN_BROADCAST")
+		end
+	end)
+	
 	bc.name = bc:AddFontString("LEFT", element:RGB("Broadcast"))
 	bc.name:SetJustifyV("TOP")
 	bc.name:SetPoint("TOPLEFT")
@@ -146,6 +197,28 @@ function element:UpdateInfotip()
 	if infotip and onBlock then
 		infotip:UpdateTooltip()
 	end
+end
+
+function element:OnSliderUpdate()
+	local offset = infotip:GetSliderOffset()
+
+	for i = 1, #infotip.BNFriends do
+		local bnfriend = infotip.BNFriends[i]
+
+		element:UpdateBNFriendAnchorPoints(i)
+
+		if i < offset then
+			bnfriend:Hide()
+		elseif i > infotip.bnIndex then
+			bnfriend:Hide()
+		elseif i >= infotip.maxLines + offset then
+			bnfriend:Hide()
+		else
+			bnfriend:Show()
+		end
+	end
+
+	element:UpdateInfotip()
 end
 
 -- ####################################################################################################################
@@ -203,7 +276,9 @@ end
 
 function element:UpdateBNFriendAnchorPoints(i)
 	local bnfriend = infotip.BNFriends[i]
-	if i == 1 then
+	local sliderOffset = infotip:GetSliderOffset()
+	
+	if i == sliderOffset or i == 1 then
 		bnfriend:SetPoint("TOPLEFT", infotip.sep, "BOTTOMLEFT", GAP)
 	else
 		-- Check if the previous BNFriend has a broadcast.
@@ -268,6 +343,7 @@ function element:DisplayBNFriends()
 			local bnfriend = element:CreateBNFriend(infotip.bnIndex)
 			bnfriend.unit = game.characterName
 			bnfriend.accountID = acc.bnetAccountID
+		    bnfriend.gameAccountID = game.gameAccountID
 			bnfriend.accountName = acc.accountName
 			bnfriend.client = game.clientProgram
 			bnfriend.note:SetText(acc.note or "")
@@ -283,7 +359,7 @@ function element:DisplayBNFriends()
 				bnfriend.name:SetText(format("%s%s - %s",statusString, btagString, nameString))
 
 				-- Level/Faction Column - Only displayed for WoW toons.
-				bnfriend.level:SetText(game.characterLevel or "")
+				bnfriend.level:SetText((game.characterLevel and game.characterLevel > 0) and game.characterLevel or "")
 				bnfriend.level:SetTextColor(LUI:GetDifficultyColor(game.characterLevel))
 				element:SetFactionIcon(bnfriend, game.factionName)
 
@@ -344,7 +420,9 @@ function element:DisplayBNFriends()
 			bnfriend.hasBroadcast = false
 		end
 	end
-
+	infotip:UpdateSlider(infotip.bnIndex)
+	local offset = infotip:GetSliderOffset()
+	
 	for i = 1, #infotip.BNFriends do
 		local bnfriend = infotip.BNFriends[i]
 		bnfriend.name:SetWidth(nameColumnWidth)
@@ -355,7 +433,12 @@ function element:DisplayBNFriends()
 		element:UpdateBNFriendAnchorPoints(i)
 
 		-- Show/Hide the needed members.
-		if i > infotip.bnIndex then bnfriend:Hide()
+		if i < offset then
+			bnfriend:Hide()
+		elseif i > infotip.bnIndex then
+			bnfriend:Hide()
+		elseif i >= infotip.maxLines + offset then
+			bnfriend:Hide()
 		else
 			infotip.maxHeight = infotip.maxHeight + bnfriend:GetHeight()
 			bnfriend:Show()
@@ -384,12 +467,12 @@ end
 function element.OnBNFriendButtonClick(bnfriend, button)
 	if IsAltKeyDown() then
 		if bnfriend.client ~= BNET_CLIENT_WOW then return end
-		FriendsFrame_BattlenetInviteByIndex(bnfriend.index)
+		C_BattleNet.InviteFriend(bnfriend.gameAccountID)
 	elseif IsControlKeyDown() then
 		_G.FriendsFrame.NotesID = bnfriend.accountID
 		StaticPopup_Show("SET_BNFRIENDNOTE", bnfriend.accountName)
 	elseif button == "MiddleButton" then
-		StaticPopup_Show("CONFIRM_REMOVE_FRIEND", bnfriend.accountName, nil, bnfriend.accountID)
+		StaticPopup_Show("LUI_CONFIRM_REMOVE_BN_FRIEND", bnfriend.accountName, nil, bnfriend.accountID)
 	elseif button == "LeftButton" then
 		local name = format("%s:%s", bnfriend.accountName, bnfriend.accountID)
 		local playerLink = format(BNPLAYER_LINK_FORMAT, name)
@@ -560,6 +643,7 @@ function element.OnEnter(frame_)
 
 			-- Show Broadcast
 			local broadcast = element:CreateBroadcast()
+			
 			local _, _, _, currentBroadcast = BNGetInfo()
 			local broadcastPrefix = CreateColor(1, 1, 1):WrapTextInColorCode(BATTLENET_BROADCAST..":")
 			broadcast.name:SetText( format("%s %s", broadcastPrefix or "", currentBroadcast or "") )
@@ -616,6 +700,11 @@ function element.OnEnter(frame_)
 	infotip:SetWidth(infotip.maxWidth)
 	infotip:SetHeight(infotip.maxHeight)
 	infotip:Show()
+	element:BuildLegend()
+	legendTip:ClearAllPoints()
+	legendTip:SetPoint("RIGHT", infotip, "LEFT", -8, 0)
+	legendTip:Show()
+	
 	onBlock = true
 end
 
@@ -623,6 +712,10 @@ function element.OnLeave(frame_)
 	if not infotip:IsMouseOver() then
 		infotip:Hide()
 		onBlock = false
+	end
+	
+		if legendTip then
+		legendTip:Hide()
 	end
 end
 

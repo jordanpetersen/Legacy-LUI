@@ -86,27 +86,20 @@ local function UpdateColor(self, event)
 	end
 
 	if(color) then
-		local issecretvalue = _G.issecretvalue
-		local r, g, b
-		if type(color) == 'table' and type(color.GetRGB) == 'function' then
-			local ok, cr, cg, cb = pcall(color.GetRGB, color)
-			if ok and not (issecretvalue and (issecretvalue(cr) or issecretvalue(cg) or issecretvalue(cb))) then
-				r, g, b = cr, cg, cb
-			end
-		elseif type(color) == 'table' then
-			r = color.r or color[1]
-			g = color.g or color[2]
-			b = color.b or color[3]
-			if issecretvalue and (issecretvalue(r) or issecretvalue(g) or issecretvalue(b)) then
-				r, g, b = nil, nil, nil
-			end
-		end
-		if r then
-			for index = 1, #element do
-				element[index]:SetStatusBarColor(r, g, b)
-			end
+	local r, g, b
+
+	if(color.GetRGB) then
+		r, g, b = color:GetRGB()
+	else
+		r, g, b = color.r, color.g, color.b
+	end
+
+	if(r and g and b) then
+		for index = 1, #element do
+			element[index]:SetStatusBarColor(r, g, b)
 		end
 	end
+end
 
 	--[[ Callback: Runes:PostUpdateColor(color)
 	Called after the element color has been updated.
