@@ -721,7 +721,7 @@ Used to create a single unit frame and apply the currently active style to it.
 * overrideName - unique global name to use for the unit frame. Defaults to an auto-generated name based on the unit
                  (string?)
 
-oUF implements some of its own attributes. These can be supplied by the layout, but are optional.  
+oUF implements some of its own attributes. These can be supplied by the layout, but are optional.
 PingableUnitFrameTemplate is inherited for Ping support.
 
 * oUF-enableArenaPrep - can be used to toggle arena prep support. Defaults to true (boolean)
@@ -773,7 +773,7 @@ do
 
 	local nameplateDriverMixin = {}
 	--[[ nameplates:SetTargetCallback(callback)
-	Sets a callback function to be triggered whenever a nameplate has been targeted.  
+	Sets a callback function to be triggered whenever a nameplate has been targeted.
 	The payload for the callback is `(nameplate, event, unit)`.
 	--]]
 	function nameplateDriverMixin:SetTargetCallback(callback)
@@ -781,7 +781,7 @@ do
 		self.targetCallback = callback
 	end
 	--[[ nameplates:SetAddedCallback(callback)
-	Sets a callback function to be triggered whenever a nameplate has been added.  
+	Sets a callback function to be triggered whenever a nameplate has been added.
 	The payload for the callback is `(nameplate, event, unit)`.
 	--]]
 	function nameplateDriverMixin:SetAddedCallback(callback)
@@ -789,7 +789,7 @@ do
 		self.addedCallback = callback
 	end
 	--[[ nameplates:SetRemovedCallback(callback)
-	Sets a callback function to be triggered whenever a nameplate has been removed.  
+	Sets a callback function to be triggered whenever a nameplate has been removed.
 	The payload for the callback is `(nameplate, event, unit)`.
 	--]]
 	function nameplateDriverMixin:SetRemovedCallback(callback)
@@ -798,8 +798,8 @@ do
 	end
 
 	--[[ nameplates:SetSize(width[, height])
-	Sets the width and size for all nameplates.  
-	If only width is provided it will also be used for the height.  
+	Sets the width and size for all nameplates.
+	If only width is provided it will also be used for the height.
 	The default width is `200`, and the default height is `30`.
 	--]]
 	function nameplateDriverMixin:SetSize(width, height)
@@ -813,7 +813,7 @@ do
 	end
 
 	--[[ nameplates:SetEnemyInteractible(state)
-	Sets the interactible state for enemy nameplates.  
+	Sets the interactible state for enemy nameplates.
 	They are interactible by default.
 	--]]
 	function nameplateDriverMixin:SetEnemyInteractible(state)
@@ -823,7 +823,7 @@ do
 	end
 
 	--[[ nameplates:SetFriendlyInteractible(state)
-	Sets the interactible state for friendly nameplates.  
+	Sets the interactible state for friendly nameplates.
 	They are interactible by default.
 	--]]
 	function nameplateDriverMixin:SetFriendlyInteractible(state)
