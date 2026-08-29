@@ -37,13 +37,13 @@ local function Update(self, event)
 
 	* self - the Range element
 	--]]
-	if (element.PreUpdate) then
+	if(element.PreUpdate) then
 		element:PreUpdate()
 	end
 
 	local inRange
 	local isEligible = UnitIsConnected(unit) and UnitInParty(unit)
-	if (isEligible) then
+	if(isEligible) then
 		inRange = UnitInRange(unit)
 		self:SetAlphaFromBoolean(inRange, element.insideAlpha, element.outsideAlpha)
 	else
@@ -58,7 +58,7 @@ local function Update(self, event)
 	* inRange    - indicates if the unit is within 40 yards of the player (boolean)
 	* isEligible - indicates if the unit is eligible for the range check (boolean)
 	--]]
-	if (element.PostUpdate) then
+	if(element.PostUpdate) then
 		return element:PostUpdate(self, inRange, isEligible)
 	end
 end
@@ -70,12 +70,12 @@ local function Path(self, ...)
 	* self  - the parent object
 	* event - the event triggering the update (string)
 	--]]
-	return (self.Range.Override or Update)(self, ...)
+	return (self.Range.Override or Update) (self, ...)
 end
 
 local function Enable(self, unit)
 	local element = self.Range
-	if (element) then
+	if(element) then
 		element.__owner = self
 		element.insideAlpha = element.insideAlpha or 1
 		element.outsideAlpha = element.outsideAlpha or 0.55
@@ -83,7 +83,7 @@ local function Enable(self, unit)
 		self:RegisterEvent('UNIT_IN_RANGE_UPDATE', Path)
 		self:RegisterEvent('UNIT_CONNECTION', Path)
 
-		if (unit == 'party' or unit == 'raid') then
+		if(unit == 'party' or unit == 'raid') then
 			self:RegisterEvent('PARTY_MEMBER_ENABLE', Path)
 			self:RegisterEvent('PARTY_MEMBER_DISABLE', Path)
 		end
@@ -94,7 +94,7 @@ end
 
 local function Disable(self)
 	local element = self.Range
-	if (element) then
+	if(element) then
 		self:SetAlpha(element.insideAlpha)
 
 		self:UnregisterEvent('UNIT_IN_RANGE_UPDATE', Path)

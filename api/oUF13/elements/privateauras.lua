@@ -57,7 +57,7 @@ local function CreateAura(element, index)
 	* aura      - the private aura anchor frame to be positioned
 	* auraIndex - the index of the private aura anchor frame
 	--]]
-	if (element.PostCreateAura) then element:PostCreateAura(aura, index) end
+	if(element.PostCreateAura) then element:PostCreateAura(aura, index) end
 
 	return aura
 end
@@ -81,7 +81,7 @@ local function SetPosition(element, aura, auraIndex)
 end
 
 local function resetAnchors(element)
-	if (element.anchors) then
+	if(element.anchors) then
 		for _, anchor in next, element.anchors do
 			C_UnitAuras.RemovePrivateAuraAnchor(anchor)
 		end
@@ -92,7 +92,7 @@ end
 
 local function Update(self)
 	local element = self.PrivateAuras
-	if (element.anchors) then
+	if(element.anchors) then
 		resetAnchors(element)
 	else
 		element.anchors = {}
@@ -100,14 +100,14 @@ local function Update(self)
 
 	for index = 1, (element.num or 6) do -- 5 or 6 is what Blizzard creates, so we default to that
 		local aura = element[index]
-		if (not aura) then
+		if(not aura) then
 			--[[ Override: PrivateAuras:CreateAura(auraIndex)
 			Used to completely override the internal function for creating private aura anchor frames.
 
 			* self      - the PrivateAuras element
 			* auraIndex - the index of the private aura anchor frame
 			--]]
-			aura = (element.CreateAura or CreateAura)(element, index)
+			aura = (element.CreateAura or CreateAura) (element, index)
 			table.insert(element, aura)
 		end
 
@@ -122,7 +122,7 @@ local function Update(self)
 		* auraIndex - the index of the private aura anchor frame
 		--]]
 		do
-			(element.SetPosition or SetPosition)(element, aura, index)
+			(element.SetPosition or SetPosition) (element, aura, index)
 		end
 
 		table.insert(element.anchors, C_UnitAuras.AddPrivateAuraAnchor({
@@ -154,7 +154,7 @@ local function Update(self)
 
 	* self - the PrivateAuras element
 	--]]
-	if (element.PostUpdate) then element:PostUpdate() end
+	if(element.PostUpdate) then element:PostUpdate() end
 end
 
 local function Path(self, ...)
@@ -165,7 +165,7 @@ local function Path(self, ...)
 	* self - the PrivateAuras element
 	--]]
 	do
-		(self.PrivateAuras.Override or Update)(self, ...)
+		(self.PrivateAuras.Override or Update) (self, ...)
 	end
 end
 
@@ -175,14 +175,14 @@ end
 
 local function Disable(self)
 	local element = self.PrivateAuras
-	if (element and element.anchors) then
+	if(element and element.anchors) then
 		resetAnchors(element)
 	end
 end
 
 local function Enable(self, unit)
 	local element = self.PrivateAuras
-	if (element) then
+	if(element) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 

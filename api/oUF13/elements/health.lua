@@ -156,38 +156,38 @@ local STATE = {}
 local unitSelectionType = Private.unitSelectionType
 
 local function UpdateColor(self, event, unit)
-	if (not unit or self.__unit ~= unit) then return end
+	if(not unit or self.__unit ~= unit) then return end
 	local element = self.Health
 
 	local color
-	if (element.colorDisconnected and not UnitIsConnected(unit)) then
+	if(element.colorDisconnected and not UnitIsConnected(unit)) then
 		color = self.colors.disconnected
-	elseif (element.colorTapping and not UnitPlayerControlled(unit) and UnitIsTapDenied(unit)) then
+	elseif(element.colorTapping and not UnitPlayerControlled(unit) and UnitIsTapDenied(unit)) then
 		color = self.colors.tapped
-	elseif (element.colorThreat and not UnitPlayerControlled(unit) and UnitThreatSituation('player', unit)) then
-		color = self.colors.threat[UnitThreatSituation('player', unit)]
-	elseif (element.colorClass and (UnitIsPlayer(unit) or UnitInPartyIsAI(unit)))
+	elseif(element.colorThreat and not UnitPlayerControlled(unit) and UnitThreatSituation('player', unit)) then
+		color =  self.colors.threat[UnitThreatSituation('player', unit)]
+	elseif(element.colorClass and (UnitIsPlayer(unit) or UnitInPartyIsAI(unit)))
 		or (element.colorClassNPC and not (UnitIsPlayer(unit) or UnitInPartyIsAI(unit)))
 		or (element.colorClassPet and UnitPlayerControlled(unit) and not UnitIsPlayer(unit)) then
 		local _, class = UnitClass(unit)
-		if (issecretvalue(class)) then
+		if(issecretvalue(class)) then
 			-- BUG: we can't use custom colors if the class is secret
 			-- https://github.com/oUF-wow/oUF/issues/873
 			color = C_ClassColor.GetClassColor(class)
 		else
 			color = self.colors.class[class]
 		end
-	elseif (element.colorSelection and unitSelectionType(unit, element.considerSelectionInCombatHostile)) then
+	elseif(element.colorSelection and unitSelectionType(unit, element.considerSelectionInCombatHostile)) then
 		color = self.colors.selection[unitSelectionType(unit, element.considerSelectionInCombatHostile)]
-	elseif (element.colorReaction and UnitReaction(unit, 'player')) then
+	elseif(element.colorReaction and UnitReaction(unit, 'player')) then
 		color = self.colors.reaction[UnitReaction(unit, 'player')]
-	elseif (element.colorSmooth and self.colors.health:GetCurve()) then
+	elseif(element.colorSmooth and self.colors.health:GetCurve()) then
 		color = element.values:EvaluateCurrentHealthPercent(self.colors.health:GetCurve())
-	elseif (element.colorHealth) then
+	elseif(element.colorHealth) then
 		color = self.colors.health
 	end
 
-	if (color) then
+	if(color) then
 		element:SetStatusBarColor(color:GetRGB())
 	end
 
@@ -198,7 +198,7 @@ local function UpdateColor(self, event, unit)
 	* unit  - the unit for which the update has been triggered (string)
 	* color - the used ColorMixin-based object (table?)
 	--]]
-	if (element.PostUpdateColor) then
+	if(element.PostUpdateColor) then
 		element:PostUpdateColor(unit, color)
 	end
 end
@@ -211,11 +211,11 @@ local function ColorPath(self, ...)
 	* event - the event triggering the update (string)
 	* unit  - the unit accompanying the event (string)
 	--]]
-	(self.Health.UpdateColor or UpdateColor)(self, ...)
+	(self.Health.UpdateColor or UpdateColor) (self, ...)
 end
 
 local function Update(self, event, unit)
-	if (not unit or self.__unit ~= unit) then return end
+	if(not unit or self.__unit ~= unit) then return end
 	local element = self.Health
 
 	--[[ Callback: Health:PreUpdate(unit)
@@ -224,7 +224,7 @@ local function Update(self, event, unit)
 	* self - the Health element
 	* unit - the unit for which the update has been triggered (string)
 	--]]
-	if (element.PreUpdate) then
+	if(element.PreUpdate) then
 		element:PreUpdate(unit)
 	end
 
@@ -234,55 +234,55 @@ local function Update(self, event, unit)
 	element:SetMinMaxValues(0, max)
 
 	local cur = element.values:GetCurrentHealth()
-	if (UnitIsConnected(unit)) then
+	if(UnitIsConnected(unit)) then
 		element:SetValue(cur, element.smoothing)
 	else
 		element:SetValue(max, element.smoothing)
 	end
 
-	if (element.HealingAll or element.HealingPlayer or element.HealingOther or element.OverHealIndicator) then
+	if(element.HealingAll or element.HealingPlayer or element.HealingOther or element.OverHealIndicator) then
 		local allHeal, playerHeal, otherHeal, healClamped = element.values:GetIncomingHeals()
-		if (element.HealingAll) then
+		if(element.HealingAll) then
 			element.HealingAll:SetMinMaxValues(0, max)
 			element.HealingAll:SetValue(allHeal)
 		end
-		if (element.HealingPlayer) then
+		if(element.HealingPlayer) then
 			element.HealingPlayer:SetMinMaxValues(0, max)
 			element.HealingPlayer:SetValue(playerHeal)
 		end
-		if (element.HealingOther) then
+		if(element.HealingOther) then
 			element.HealingOther:SetMinMaxValues(0, max)
 			element.HealingOther:SetValue(otherHeal)
 		end
-		if (element.OverHealIndicator) then
+		if(element.OverHealIndicator) then
 			element.OverHealIndicator:SetAlphaFromBoolean(healClamped, 1, 0)
 		end
 	end
 
-	if (element.DamageAbsorb or element.OverDamageAbsorbIndicator) then
+	if(element.DamageAbsorb or element.OverDamageAbsorbIndicator) then
 		local damageAbsorbAmount, damageAbsorbClamped = element.values:GetDamageAbsorbs()
-		if (element.DamageAbsorb) then
+		if(element.DamageAbsorb) then
 			element.DamageAbsorb:SetMinMaxValues(0, max)
 			element.DamageAbsorb:SetValue(damageAbsorbAmount)
 		end
-		if (element.OverDamageAbsorbIndicator) then
+		if(element.OverDamageAbsorbIndicator) then
 			element.OverDamageAbsorbIndicator:SetAlphaFromBoolean(damageAbsorbClamped, 1, 0)
 		end
 	end
 
-	if (element.HealAbsorb or element.OverHealAbsorbIndicator) then
+	if(element.HealAbsorb or element.OverHealAbsorbIndicator) then
 		local healAbsorbAmount, healAbsorbClamped = element.values:GetHealAbsorbs()
-		if (element.HealAbsorb) then
+		if(element.HealAbsorb) then
 			element.HealAbsorb:SetMinMaxValues(0, max)
 			element.HealAbsorb:SetValue(healAbsorbAmount)
 		end
-		if (element.OverHealAbsorbIndicator) then
+		if(element.OverHealAbsorbIndicator) then
 			element.OverHealAbsorbIndicator:SetAlphaFromBoolean(healAbsorbClamped, 1, 0)
 		end
 	end
 
 	local lossPerc = 0
-	if (element.TempLoss) then
+	if(element.TempLoss) then
 		lossPerc = GetUnitTotalModifiedMaxHealthPercent(unit)
 		element.TempLoss:SetValue(lossPerc, element.smoothing)
 	end
@@ -296,7 +296,7 @@ local function Update(self, event, unit)
 	* max      - the unit's maximum possible health value (number)
 	* lossPerc - the percent by which the unit's max health has been temporarily reduced (number)
 	--]]
-	if (element.PostUpdate) then
+	if(element.PostUpdate) then
 		element:PostUpdate(unit, cur, max, lossPerc)
 	end
 end
@@ -305,23 +305,23 @@ local function UpdatePredictionSize(self, event, unit)
 	local element = self.Health
 
 	local method = STATE[element].horizontal and 'SetWidth' or 'SetHeight'
-	if (element.HealingAll) then
+	if(element.HealingAll) then
 		element.HealingAll[method](element.HealingAll, STATE[element].size)
 	end
 
-	if (element.HealingPlayer) then
+	if(element.HealingPlayer) then
 		element.HealingPlayer[method](element.HealingPlayer, STATE[element].size)
 	end
 
-	if (element.HealingOther) then
+	if(element.HealingOther) then
 		element.HealingOther[method](element.HealingOther, STATE[element].size)
 	end
 
-	if (element.DamageAbsorb) then
+	if(element.DamageAbsorb) then
 		element.DamageAbsorb[method](element.DamageAbsorb, STATE[element].size)
 	end
 
-	if (element.HealAbsorb) then
+	if(element.HealAbsorb) then
 		element.HealAbsorb[method](element.HealAbsorb, STATE[element].size)
 	end
 end
@@ -331,7 +331,7 @@ local function shouldUpdatePredictionSize(self)
 
 	local horizontal = element:GetOrientation() == 'HORIZONTAL'
 	local size = horizontal and element:GetWidth() or element:GetHeight()
-	if (horizontal ~= STATE[element].horizontal or size ~= STATE[element].size) then
+	if(horizontal ~= STATE[element].horizontal or size ~= STATE[element].size) then
 		STATE[element].horizontal = horizontal
 		STATE[element].size = size
 
@@ -348,8 +348,8 @@ local function Path(self, ...)
 	* unit  - the unit accompanying the event (string)
 	* ...   - the arguments accompanying the event
 	--]]
-	if (shouldUpdatePredictionSize(self)) then
-		(self.Health.UpdatePredictionSize or UpdatePredictionSize)(self, ...)
+	if(shouldUpdatePredictionSize(self)) then
+		(self.Health.UpdatePredictionSize or UpdatePredictionSize) (self, ...)
 	end
 
 	--[[ Override: Health.Override(self, event, unit)
@@ -360,7 +360,7 @@ local function Path(self, ...)
 	* unit  - the unit accompanying the event (string)
 	--]]
 	do
-		(self.Health.Override or Update)(self, ...)
+		(self.Health.Override or Update) (self, ...)
 	end
 
 	ColorPath(self, ...)
@@ -381,9 +381,9 @@ Used to toggle coloring by the unit's selection.
 * isForced - forces the event update even if the state wasn't changed (boolean)
 --]]
 local function SetColorSelection(element, state, isForced)
-	if (element.colorSelection ~= state or isForced) then
+	if(element.colorSelection ~= state or isForced) then
 		element.colorSelection = state
-		if (state) then
+		if(state) then
 			element.__owner:RegisterEvent('UNIT_FLAGS', ColorPath)
 		else
 			element.__owner:UnregisterEvent('UNIT_FLAGS', ColorPath)
@@ -399,11 +399,11 @@ Used to toggle coloring if the unit isn't tapped by the player.
 * isForced - forces the event update even if the state wasn't changed (boolean)
 --]]
 local function SetColorTapping(element, state, isForced)
-	if (element.colorTapping ~= state or isForced) then
+	if(element.colorTapping ~= state or isForced) then
 		element.colorTapping = state
-		if (state) then
+		if(state) then
 			element.__owner:RegisterEvent('UNIT_FACTION', ColorPath)
-		elseif (not element.colorReaction) then
+		elseif(not element.colorReaction) then
 			element.__owner:UnregisterEvent('UNIT_FACTION', ColorPath)
 		end
 	end
@@ -417,11 +417,11 @@ Used to toggle coloring by the unit's reaction.
 * isForced - forces the event update even if the state wasn't changed (boolean)
 --]]
 local function SetColorReaction(element, state, isForced)
-	if (element.colorReaction ~= state or isForced) then
+	if(element.colorReaction ~= state or isForced) then
 		element.colorReaction = state
-		if (state) then
+		if(state) then
 			element.__owner:RegisterEvent('UNIT_FACTION', ColorPath)
-		elseif (not element.colorTapping) then
+		elseif(not element.colorTapping) then
 			element.__owner:UnregisterEvent('UNIT_FACTION', ColorPath)
 		end
 	end
@@ -435,9 +435,9 @@ Used to toggle coloring by the unit's threat status.
 * isForced - forces the event update even if the state wasn't changed (boolean)
 --]]
 local function SetColorThreat(element, state, isForced)
-	if (element.colorThreat ~= state or isForced) then
+	if(element.colorThreat ~= state or isForced) then
 		element.colorThreat = state
-		if (state) then
+		if(state) then
 			element.__owner:RegisterEvent('UNIT_THREAT_LIST_UPDATE', ColorPath)
 		else
 			element.__owner:UnregisterEvent('UNIT_THREAT_LIST_UPDATE', ColorPath)
@@ -447,7 +447,7 @@ end
 
 local function Enable(self, unit)
 	local element = self.Health
-	if (element) then
+	if(element) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 		element.SetColorSelection = SetColorSelection
@@ -457,37 +457,37 @@ local function Enable(self, unit)
 
 		STATE[element] = {}
 
-		if (element.values) then
+		if(element.values) then
 			element.values:ResetPredictedValues()
 		else
 			element.values = CreateUnitHealPredictionCalculator()
 		end
 
-		if (not element.smoothing) then
+		if(not element.smoothing) then
 			element.smoothing = Enum.StatusBarInterpolation.Immediate
 		end
 
-		if (element.maximumHealthClampMode) then
+		if(element.maximumHealthClampMode) then
 			element.values:SetMaximumHealthMode(element.maximumHealthClampMode)
 		end
 
-		if (element.damageAbsorbClampMode) then
+		if(element.damageAbsorbClampMode) then
 			element.values:SetDamageAbsorbClampMode(element.damageAbsorbClampMode)
 		end
 
-		if (element.healAbsorbClampMode) then
+		if(element.healAbsorbClampMode) then
 			element.values:SetHealAbsorbClampMode(element.healAbsorbClampMode)
 		end
 
-		if (element.healAbsorbMode) then
+		if(element.healAbsorbMode) then
 			element.values:SetHealAbsorbMode(element.healAbsorbMode)
 		end
 
-		if (element.incomingHealClampMode) then
+		if(element.incomingHealClampMode) then
 			element.values:SetIncomingHealClampMode(element.incomingHealClampMode)
 		end
 
-		if (element.incomingHealOverflow) then
+		if(element.incomingHealOverflow) then
 			element.values:SetIncomingHealOverflowPercent(element.incomingHealOverflow)
 		end
 
@@ -495,89 +495,89 @@ local function Enable(self, unit)
 		self:RegisterEvent('UNIT_MAXHEALTH', Path)
 		self:RegisterEvent('UNIT_CONNECTION', Path)
 
-		if (unit == 'party' or unit == 'raid') then
+		if(unit == 'party' or unit == 'raid') then
 			self:RegisterEvent('PARTY_MEMBER_ENABLE', Path)
 			self:RegisterEvent('PARTY_MEMBER_DISABLE', Path)
 		end
 
-		if (element.colorSelection) then
+		if(element.colorSelection) then
 			self:RegisterEvent('UNIT_FLAGS', ColorPath)
 		end
 
-		if (element.colorTapping or element.colorReaction) then
+		if(element.colorTapping or element.colorReaction) then
 			self:RegisterEvent('UNIT_FACTION', ColorPath)
 		end
 
-		if (element.colorThreat) then
+		if(element.colorThreat) then
 			self:RegisterEvent('UNIT_THREAT_LIST_UPDATE', ColorPath)
 		end
 
-		if (element.HealingAll or element.HealingPlayer or element.HealingOther or element.OverHealIndicator) then
+		if(element.HealingAll or element.HealingPlayer or element.HealingOther or element.OverHealIndicator) then
 			self:RegisterEvent('UNIT_HEAL_PREDICTION', Path)
 		end
 
-		if (element.DamageAbsorb or element.OverDamageAbsorbIndicator) then
+		if(element.DamageAbsorb or element.OverDamageAbsorbIndicator) then
 			self:RegisterEvent('UNIT_ABSORB_AMOUNT_CHANGED', Path)
 		end
 
-		if (element.HealAbsorb or element.OverHealAbsorbIndicator) then
+		if(element.HealAbsorb or element.OverHealAbsorbIndicator) then
 			self:RegisterEvent('UNIT_HEAL_ABSORB_AMOUNT_CHANGED', Path)
 		end
 
-		if (element.TempLoss) then
+		if(element.TempLoss) then
 			self:RegisterEvent('UNIT_MAX_HEALTH_MODIFIERS_CHANGED', Path)
 		end
 
-		if (element:IsObjectType('StatusBar') and not element:GetStatusBarTexture()) then
+		if(element:IsObjectType('StatusBar') and not element:GetStatusBarTexture()) then
 			element:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 		end
 
-		if (element.HealingAll) then
-			if (element.HealingAll:IsObjectType('StatusBar') and not element.HealingAll:GetStatusBarTexture()) then
+		if(element.HealingAll) then
+			if(element.HealingAll:IsObjectType('StatusBar') and not element.HealingAll:GetStatusBarTexture()) then
 				element.HealingAll:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 			end
 		end
 
-		if (element.HealingPlayer) then
-			if (element.HealingPlayer:IsObjectType('StatusBar') and not element.HealingPlayer:GetStatusBarTexture()) then
+		if(element.HealingPlayer) then
+			if(element.HealingPlayer:IsObjectType('StatusBar') and not element.HealingPlayer:GetStatusBarTexture()) then
 				element.HealingPlayer:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 			end
 		end
 
-		if (element.HealingOther) then
-			if (element.HealingOther:IsObjectType('StatusBar') and not element.HealingOther:GetStatusBarTexture()) then
+		if(element.HealingOther) then
+			if(element.HealingOther:IsObjectType('StatusBar') and not element.HealingOther:GetStatusBarTexture()) then
 				element.HealingOther:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 			end
 		end
 
-		if (element.OverHealIndicator) then
-			if (element.OverHealIndicator:IsObjectType('Texture') and not element.OverHealIndicator:GetTexture()) then
+		if(element.OverHealIndicator) then
+			if(element.OverHealIndicator:IsObjectType('Texture') and not element.OverHealIndicator:GetTexture()) then
 				element.OverHealIndicator:SetTexture([[Interface\RaidFrame\Shield-Overshield]])
 				element.OverHealIndicator:SetBlendMode('ADD')
 			end
 		end
 
-		if (element.DamageAbsorb) then
-			if (element.DamageAbsorb:IsObjectType('StatusBar') and not element.DamageAbsorb:GetStatusBarTexture()) then
+		if(element.DamageAbsorb) then
+			if(element.DamageAbsorb:IsObjectType('StatusBar') and not element.DamageAbsorb:GetStatusBarTexture()) then
 				element.DamageAbsorb:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 			end
 		end
 
-		if (element.HealAbsorb) then
-			if (element.HealAbsorb:IsObjectType('StatusBar') and not element.HealAbsorb:GetStatusBarTexture()) then
+		if(element.HealAbsorb) then
+			if(element.HealAbsorb:IsObjectType('StatusBar') and not element.HealAbsorb:GetStatusBarTexture()) then
 				element.HealAbsorb:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 			end
 		end
 
-		if (element.OverDamageAbsorbIndicator) then
-			if (element.OverDamageAbsorbIndicator:IsObjectType('Texture') and not element.OverDamageAbsorbIndicator:GetTexture()) then
+		if(element.OverDamageAbsorbIndicator) then
+			if(element.OverDamageAbsorbIndicator:IsObjectType('Texture') and not element.OverDamageAbsorbIndicator:GetTexture()) then
 				element.OverDamageAbsorbIndicator:SetTexture([[Interface\RaidFrame\Shield-Overshield]])
 				element.OverDamageAbsorbIndicator:SetBlendMode('ADD')
 			end
 		end
 
-		if (element.OverHealAbsorbIndicator) then
-			if (element.OverHealAbsorbIndicator:IsObjectType('Texture') and not element.OverHealAbsorbIndicator:GetTexture()) then
+		if(element.OverHealAbsorbIndicator) then
+			if(element.OverHealAbsorbIndicator:IsObjectType('Texture') and not element.OverHealAbsorbIndicator:GetTexture()) then
 				element.OverHealAbsorbIndicator:SetTexture([[Interface\RaidFrame\Absorb-Overabsorb]])
 				element.OverHealAbsorbIndicator:SetBlendMode('ADD')
 			end
@@ -585,12 +585,12 @@ local function Enable(self, unit)
 
 		element:Show()
 
-		if (element.TempLoss) then
-			if (element.TempLoss:IsObjectType('StatusBar')) then
+		if(element.TempLoss) then
+			if(element.TempLoss:IsObjectType('StatusBar')) then
 				element.TempLoss:SetMinMaxValues(0, 1)
 				element.TempLoss:SetValue(0, element.smoothing)
 
-				if (not element.TempLoss:GetStatusBarTexture()) then
+				if(not element.TempLoss:GetStatusBarTexture()) then
 					element.TempLoss:SetStatusBarTexture('UI-HUD-UnitFrame-Target-PortraitOn-Bar-TempHPLoss')
 				end
 			end
@@ -604,38 +604,38 @@ end
 
 local function Disable(self)
 	local element = self.Health
-	if (element) then
+	if(element) then
 		element:Hide()
 
-		if (element.HealingAll) then
+		if(element.HealingAll) then
 			element.HealingAll:Hide()
 		end
 
-		if (element.HealingPlayer) then
+		if(element.HealingPlayer) then
 			element.HealingPlayer:Hide()
 		end
 
-		if (element.HealingOther) then
+		if(element.HealingOther) then
 			element.HealingOther:Hide()
 		end
 
-		if (element.OverHealIndicator) then
+		if(element.OverHealIndicator) then
 			element.OverHealIndicator:Hide()
 		end
 
-		if (element.DamageAbsorb) then
+		if(element.DamageAbsorb) then
 			element.DamageAbsorb:Hide()
 		end
 
-		if (element.HealAbsorb) then
+		if(element.HealAbsorb) then
 			element.HealAbsorb:Hide()
 		end
 
-		if (element.OverDamageAbsorbIndicator) then
+		if(element.OverDamageAbsorbIndicator) then
 			element.OverDamageAbsorbIndicator:Hide()
 		end
 
-		if (element.OverHealAbsorbIndicator) then
+		if(element.OverHealAbsorbIndicator) then
 			element.OverHealAbsorbIndicator:Hide()
 		end
 
@@ -652,7 +652,7 @@ local function Disable(self)
 		self:UnregisterEvent('UNIT_FLAGS', ColorPath)
 		self:UnregisterEvent('UNIT_THREAT_LIST_UPDATE', ColorPath)
 
-		if (element.TempLoss) then
+		if(element.TempLoss) then
 			element.TempLoss:Hide()
 		end
 	end

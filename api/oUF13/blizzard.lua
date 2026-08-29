@@ -13,77 +13,76 @@ local isPartyHooked = false
 
 local function handleFrame(baseName)
 	local frame
-	if (type(baseName) == 'string') then
+	if(type(baseName) == 'string') then
 		frame = _G[baseName]
 	else
 		frame = baseName
 	end
 
-	if (frame) then
+	if(frame) then
 		frame:UnregisterAllEvents()
 		frame:SetRolesets('alwaysBlocked')
 
-		local health = frame.healthBar or frame.healthbar or frame.HealthBar or
-		(frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar)
-		if (health) then
+		local health = frame.healthBar or frame.healthbar or frame.HealthBar or (frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar)
+		if(health) then
 			health:UnregisterAllEvents()
 		end
 
 		local power = frame.manabar or frame.ManaBar
-		if (power) then
+		if(power) then
 			power:UnregisterAllEvents()
 		end
 
 		local castbar = frame.castBar or frame.spellbar or frame.CastingBarFrame
-		if (castbar) then
+		if(castbar) then
 			castbar:UnregisterAllEvents()
 		end
 
 		local altpowerbar = frame.powerBarAlt or frame.PowerBarAlt
-		if (altpowerbar) then
+		if(altpowerbar) then
 			altpowerbar:UnregisterAllEvents()
 		end
 
 		local buffFrame = frame.BuffFrame or frame.AurasFrame
-		if (buffFrame) then
+		if(buffFrame) then
 			buffFrame:UnregisterAllEvents()
 		end
 
 		local petFrame = frame.petFrame or frame.PetFrame
-		if (petFrame) then
+		if(petFrame) then
 			petFrame:UnregisterAllEvents()
 		end
 
 		local totFrame = frame.totFrame
-		if (totFrame) then
+		if(totFrame) then
 			totFrame:UnregisterAllEvents()
 		end
 
 		local ccRemoverFrame = frame.CcRemoverFrame
-		if (ccRemoverFrame) then
+		if(ccRemoverFrame) then
 			ccRemoverFrame:UnregisterAllEvents()
 		end
 
 		local debuffFrame = frame.DebuffFrame
-		if (debuffFrame) then
+		if(debuffFrame) then
 			debuffFrame:UnregisterAllEvents()
 		end
 	end
 end
 
 function oUF:DisableBlizzard(unit)
-	if (not unit) then return end
+	if(not unit) then return end
 
-	if (unit == 'player') then
+	if(unit == 'player') then
 		handleFrame(PlayerFrame)
-	elseif (unit == 'pet') then
+	elseif(unit == 'pet') then
 		handleFrame(PetFrame)
-	elseif (unit == 'target') then
+	elseif(unit == 'target') then
 		handleFrame(TargetFrame)
-	elseif (unit == 'focus') then
+	elseif(unit == 'focus') then
 		handleFrame(FocusFrame)
-	elseif (unit:match('boss%d?$')) then
-		if (not isBossHooked) then
+	elseif(unit:match('boss%d?$')) then
+		if(not isBossHooked) then
 			isBossHooked = true
 
 			-- it's needed because the layout manager can bring frames that are
@@ -97,8 +96,8 @@ function oUF:DisableBlizzard(unit)
 				handleFrame('Boss' .. i .. 'TargetFrame')
 			end
 		end
-	elseif (unit:match('party%d?$')) then
-		if (not isPartyHooked) then
+	elseif(unit:match('party%d?$')) then
+		if(not isPartyHooked) then
 			isPartyHooked = true
 
 			handleFrame(PartyFrame)
@@ -111,8 +110,8 @@ function oUF:DisableBlizzard(unit)
 				handleFrame('CompactPartyFrameMember' .. i)
 			end
 		end
-	elseif (unit:match('arena%d?$')) then
-		if (not isArenaHooked) then
+	elseif(unit:match('arena%d?$')) then
+		if(not isArenaHooked) then
 			isArenaHooked = true
 
 			handleFrame(CompactArenaFrame)
@@ -128,7 +127,7 @@ function oUF:DisableBlizzard(unit)
 				handleFrame(frame)
 			end
 		end
-	elseif (unit:match('nameplate%d?%d?%d?$')) then
+	elseif(unit:match('nameplate%d?%d?%d?$')) then
 		local frame = C_NamePlate.GetNamePlateForUnit(unit)
 		handleFrame(frame.UnitFrame)
 	end
