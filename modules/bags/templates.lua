@@ -32,7 +32,13 @@ local SEARCH = _G.SEARCH
 local CLEANUP_TEXT = {
 	LUIBags_CleanUp = BAG_CLEANUP_BAGS,
 	LUIBank_CleanUp = BAG_CLEANUP_BANK,
+	LUIWarband_CleanUp = BAG_CLEANUP_BANK,
 	LUIReagent_CleanUp = BAG_CLEANUP_REAGENT_BANK,
+}
+
+local DEPOSIT_TEXT = {
+	LUIBank_Deposit = _G.BANK_DEPOSIT_INCLUDE_REAGENTS or "Auto Deposit",
+	LUIWarband_Deposit = _G.BANK_DEPOSIT_INCLUDE_REAGENTS or "Auto Deposit",
 }
 
 function module:CreateCleanUpButton(name, parent, sortFunc)
@@ -57,6 +63,37 @@ function module:CreateCleanUpButton(name, parent, sortFunc)
 	return button
 end
 
+--- Deposit bags items into matching bank tabs (reagents and other deposit flags).
+---@param name string
+---@param parent Frame
+---@param bankType number
+---@return ItemButton
+function module:CreateBankDepositButton(name, parent, bankType)
+	local button = module:CreateSlot(name, parent)
+	button:SetScript("OnClick", function()
+		if not C_Bank or not C_Bank.AutoDepositItemsIntoBank then return end
+		if C_Bank.DoesBankTypeSupportAutoDeposit and not C_Bank.DoesBankTypeSupportAutoDeposit(bankType) then
+			return
+		end
+		PlaySound(CLEANUP_SOUND)
+		C_Bank.AutoDepositItemsIntoBank(bankType)
+	end)
+	button:SetScript("OnEnter", function()
+		GameTooltip:SetOwner(button)
+		GameTooltip:SetText(DEPOSIT_TEXT[name] or "Auto Deposit")
+		GameTooltip:AddLine("Moves matching items from your bags into this bank's tabs (including reagent tabs).", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	button:SetScript("OnLeave", _G.GameTooltip_Hide)
+
+	if button.icon then
+		button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		-- Herb bag icon — reads as "deposit reagents / materials"
+		button.icon:SetTexture(133849)
+	end
+	return button
+end
+
 -- ####################################################################################################################
 -- ##### Templates: Search Bar ########################################################################################
 -- ####################################################################################################################
@@ -64,13 +101,15 @@ end
 function module:CreateSearchBar(container)
 	local db = module.db.profile.Bags
 
-	-- Search Text
+	-- Title / search label (bank windows use windowTitle; bags keep SEARCH)
 	local search = container:CreateFontString(nil, "OVERLAY", "GameFonthighlightLarge")
-	local searchText = module:ColorText(SEARCH, "Search")
+	local label = container.windowTitle or SEARCH
+	local searchText = module:ColorText(label, "Search")
 	search:SetPoint("TOPLEFT", container, db.Padding, -10)
 	search:SetPoint("TOPRIGHT", -40, 0)
 	search:SetJustifyH("LEFT")
 	search:SetText(searchText)
+	container.titleLabel = label
 
 	-- Search Editbox
 	local editbox = CreateFrame("EditBox", nil, container)
@@ -126,6 +165,9 @@ function module:CreateSearchBar(container)
 		container.clear:Hide()
 		container.editbox:ClearFocus()
 		container:ShowTitleBar()
+		if container.searchText and container.titleLabel then
+			container.searchText:SetText(module:ColorText(container.titleLabel, "Search"))
+		end
 		container:SearchReset()
 	end)
 

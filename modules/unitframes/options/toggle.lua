@@ -1074,6 +1074,10 @@ module.ApplySettings = function(unit, force)
 				end
 			end
 
+			if unit == "player" then
+				module:UpdateBlizzardPlayerAuras()
+			end
+
 			-- combat feedback text
 			if dbUnit.CombatFeedback then module.funcs.CombatFeedbackText(frame, styleUnit, dbUnit) end
 

@@ -169,13 +169,13 @@ local function CreateNewPanel(info)
 end
 
 --- Create the options for the Sidebar.
----@param name string
+---@param name string # SideBars DB key (e.g. Right1)
 ---@param bar SidebarMixin
 ---@param barDB SidebarDBOptions
 ---@return LUIOption
 local function CreateSidebarOptions(name, bar, barDB)
 	local function IsSideBarDisabled() return not barDB.Enable end
-	
+
 	local function presetDropdownGet(info)
 		return barDB.Anchor
 	end
@@ -186,30 +186,48 @@ local function CreateSidebarOptions(name, bar, barDB)
 		barDB.Anchor = value
 	end
 
-	local function autoAdjustFunc()
+	local function alignBarFunc()
 		bar:AutoAdjust()
 	end
 
-	local dbName = "Sidebar"..string.gsub(name, " Sidebar", "")
-	local barColorDB = module.db.profile.Colors[dbName]
+	local function applyToBartenderFunc()
+		bar:ApplyToBartender()
+	end
 
-	return Opt:Group({name = name, db = barDB, arg = bar, args = {
-		Header = Opt:Header({name = name}),
+	local function IsApplyToBartenderDisabled()
+		if IsSideBarDisabled() then return true end
+		if not C_AddOns.IsAddOnLoaded("Bartender4") then return true end
+		return not (barDB.Anchor and strsub(barDB.Anchor, 1, 3) == "BT4")
+	end
+
+	local side = barDB.Side or bar.side or "Right"
+	local colorKey = "Sidebar"..side
+	local displayName
+	if name == "Right" or name == "Left" then
+		displayName = name.." Sidebar"
+	else
+		displayName = name:gsub("(%a+)(%d+)", "%1 %2").." Sidebar"
+	end
+
+	return Opt:Group({name = displayName, db = barDB, arg = bar, args = {
+		Header = Opt:Header({name = displayName}),
 		Enable = Opt:Toggle({name = "Enabled"}),
 		OpenInstant = Opt:Toggle({name = "Open Instantly", desc = "If enabled, there will be no delay or animation when opening or closing the sidebar.\n\nNote: During combat, the sidebar always open instantly.", disabled = IsSideBarDisabled}),
 		Spacer = Opt:Spacer({}),
 		Scale = Opt:Slider({name = "Scale", desc = format("The scale of the sidebar. For best results, this should match the Pixel-To-UI factor.\n\nFor your resolution: %.f%%", PixelUtil.GetPixelToUIUnitFactor()*100), values = Opt.ScaleValues, disabled = IsSideBarDisabled}),
-		Y = Opt:InputNumber({name = "Y Offset", desc = "Vertical position of the sidebar.", disabled = IsSideBarDisabled}),
+		Point = Opt:Select({name = "Anchor Point", desc = "Which edge of the screen the sidebar attaches to.", values = LUI.Points, disabled = IsSideBarDisabled}),
+		Y = Opt:InputNumber({name = "Y Offset", desc = "Vertical position of the sidebar. Use different Y values to stack multiple sidebars on the same edge.", disabled = IsSideBarDisabled}),
 		SpacerAnchor = Opt:Spacer({}),
-		Intro = Opt:Desc({name = "\nWhich Bar do you want to use for this Sidebar?\nChoose one or type in the frame to be anchored manually.\n\nMake sure your Bar is set to 6 buttons/2 columns and isn't used for another Sidebar.", disabled = IsSideBarDisabled}),
+		Intro = Opt:Desc({name = "\nWhich Bar do you want to use for this Sidebar?\nChoose one or type in the frame to be anchored manually.\n\nLUI only shows/hides that frame and can align it to the drawer for this session. Bartender settings are not changed unless you click Apply to Bartender. Prefer a vertical bar (12 buttons / 6 rows). Each sidebar needs its own bar.", disabled = IsSideBarDisabled}),
 		AnchorPreset = Opt:Select({name = "Bar Preset", values = PRESET_BAR_ANCHORS, get = presetDropdownGet, set = presetDropdownSet, disabled = IsSideBarDisabled}),
 		Anchor = Opt:Input({name = "Anchor", desc = "Frame that will be anchored to the sidebar", disabled = IsSideBarDisabled}),
 		SpacerAdjust = Opt:Spacer({}),
-		AutoAdjust = Opt:Execute({name = "Auto-Adjust Position", desc = "If you recently changed the bar anchor, make sure to move the previous bar outside of the Sidebar to prevent overlaps.", func = autoAdjustFunc, disabled = IsSideBarDisabled}),
-		AutoPosition = Opt:Toggle({name = "Auto-Position", desc = "If enabled, LUI will automatically position the sidebar anchor. This option automatically turns off if you change the anchor to avoid errors.", disabled = IsSideBarDisabled}),
+		AutoAdjust = Opt:Execute({name = "Align Bar to Drawer", desc = "Move the live bar frame into the drawer for this session. Does not change Bartender SavedVariables. Move the previous bar out of the way if you changed anchors.", func = alignBarFunc, disabled = IsSideBarDisabled}),
+		ApplyToBartender = Opt:Execute({name = "Apply to Bartender", desc = "Write drawer position and a 12×6 layout into the current Bartender4 profile once. Use after Align if you want the position to persist across reloads.", func = applyToBartenderFunc, disabled = IsApplyToBartenderDisabled}),
+		AutoPosition = Opt:Toggle({name = "Auto-Position", desc = "If enabled, LUI realigns the live bar frame on refresh (session only; does not edit Bartender profiles). Turns off if you change the anchor.", disabled = IsSideBarDisabled}),
 		SpacerColor = Opt:Spacer({}),
-		ColorType = Opt:ColorSelect({name = "Sidebar Texture Color", arg = dbName}),
-		[(dbName)] = Opt:Color({name = "Individual Color", hasAlpha = true}),
+		ColorType = Opt:ColorSelect({name = "Sidebar Texture Color", desc = "Shared by all sidebars on the "..side.." edge.", arg = colorKey}),
+		[(colorKey)] = Opt:Color({name = "Individual Color", hasAlpha = true}),
 	}})
 end
 
@@ -296,7 +314,7 @@ CustomArgs = {
 }
 
 for name, sidebar in module:IterateSidebars() do
-	BuiltinArgs[name] = CreateSidebarOptions(name.." Sidebar", sidebar, db.SideBars[name])
+	BuiltinArgs[name] = CreateSidebarOptions(name, sidebar, db.SideBars[name])
 end
 
 Artwork.args = {

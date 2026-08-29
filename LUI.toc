@@ -70,6 +70,11 @@ modules\bags\toolbars.lua
 modules\bags\bags.lua
 modules\bags\templates.lua
 modules\bags\backpack.lua
+# modules\bags\bank.lua
+# modules\bags\reagent.lua
+
+### Cooldown ###
+# modules\cooldown\cooldown.xml
 
 ### Tooltip ###
 modules\tooltip\tooltip.lua
@@ -101,6 +106,10 @@ modules\micromenu\micromenu.lua
 modules\raidmenu\raidmenu_init.lua
 modules\raidmenu\raidmenu.xml
 modules\raidmenu\raidmenu.lua
+
+### MarkRoster (prototype) ###
+modules\markroster\markroster_init.lua
+modules\markroster\markroster.lua
 
 ### ExpBars ###
 modules\expbars\expbars_init.lua

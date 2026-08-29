@@ -13,6 +13,8 @@ local LUI = select(2, ...)
 local module = LUI:NewModule("Bags", "AceHook-3.0")
 
 module.enableButton = true
+-- Bags OnDisable unhooks bag APIs; no ReloadUI required from Control Panel.
+module.skipReloadOnToggle = true
 
 -- ####################################################################################################################
 -- ##### Default Settings #############################################################################################
@@ -41,7 +43,7 @@ module.defaults = {
 		},
 		Bank = {
 			Lock = false,
-			RowSize = 16,
+			RowSize = 14,
 			Padding = 8,
 			Spacing = 4,
 			Scale = 1,
@@ -57,16 +59,17 @@ module.defaults = {
 			BorderSize = 5,
 			X = 0,
 			Y = 0,
+			ActiveTab = nil, -- CharacterBankTab bag ID last selected
 		},
-		Reagent = {
+		Warband = {
 			Lock = false,
-			RowSize = 16,
+			RowSize = 14,
 			Padding = 8,
 			Spacing = 4,
 			Scale = 1,
 			BagBar = true,
 			ItemQuality = true,
-			ItemLevel = false,
+			ItemLevel = true,
 			BagNewline = false,
 			ShowNew = false,
 			ShowQuest = true,
@@ -74,8 +77,18 @@ module.defaults = {
 			BackgroundTexture = "Blizzard Tooltip",
 			BorderTexture = "Stripped_medium",
 			BorderSize = 5,
-			X = 0,
+			X = 400,
 			Y = 0,
+			ActiveTab = nil, -- AccountBankTab bag ID last selected
+		},
+		-- Reagent bank frame removed in 11.2; reagent-capable character tabs replace it.
+		-- Kept empty shell so old profiles migrate without AceDB errors.
+		Reagent = {
+			Lock = false,
+			RowSize = 16,
+			Padding = 8,
+			Spacing = 4,
+			Scale = 1,
 		},
 		Textures = {
 			BackgroundTex = "Blizzard Tooltip",
@@ -115,36 +128,75 @@ function module:OnEnable()
 
 	local origToggleBag = ToggleBag
 	module:RawHook("ToggleBag", function(id)
-		if id > 5 then origToggleBag(id)
-		else module.ToggleBags(id)
-		end 
+		if module.IsManagedBankBag and module:IsManagedBankBag(id) then
+			module:SuppressBlizzardBankUI()
+			return
+		end
+		if id and id > 5 then
+			origToggleBag(id)
+		else
+			module.ToggleBags(id)
+		end
 	end, true)
 	module:RawHook("ToggleBackpack", module.ToggleBags, true)
-	module:RawHook("OpenAllBags",    module.ToggleBags, true)
-	module:RawHook("ToggleAllBags",  module.ToggleBags, true)
-	module:RawHook("OpenBackpack",   module.OpenBags,   true)
-	module:RawHook("OpenBag",        module.OpenBags,   true)
-	module:SecureHook("CloseBackpack",  module.CloseBags,  true)
-	module:SecureHook("CloseAllBags",   module.CloseBags,  true)
+	module:RawHook("OpenAllBags", module.OpenBags, true)
+	module:RawHook("ToggleAllBags", module.ToggleBags, true)
+	module:RawHook("OpenBackpack", module.OpenBags, true)
+	module:RawHook("OpenBag", function(id)
+		if module.IsManagedBankBag and module:IsManagedBankBag(id) then
+			module:SuppressBlizzardBankUI()
+			return
+		end
+		module.OpenBags()
+	end, true)
+	module:SecureHook("CloseBackpack", module.CloseBags, true)
+	module:SecureHook("CloseAllBags", module.CloseBags, true)
 
-	-- module:RegisterEvent("BANKFRAME_OPENED", module.OpenBank)
-	-- module:RegisterEvent("BANKFRAME_CLOSED", module.CloseBank)
-	-- module:RegisterEvent("PLAYERBANKSLOTS_CHANGED", module.BankContainer.BankSlotsUpdate)
-	-- module:RegisterEvent("PLAYERREAGENTBANKSLOTS_CHANGED", module.BankReagentContainer.BankSlotsUpdate)
+	module:RegisterEvent("BANKFRAME_OPENED", module.OpenBank)
+	module:RegisterEvent("BANKFRAME_CLOSED", module.CloseBank)
+	module:RegisterEvent("BANK_TAB_SETTINGS_UPDATED", "OnBankTabSettingsUpdated")
+    module:RegisterEvent("PLAYERBANKSLOTS_CHANGED", "OnBankBagSlotsChanged")
 
 	tinsert(UISpecialFrames, "LUIBags")
-	-- tinsert(UISpecialFrames, "LUIBank")
-	-- tinsert(UISpecialFrames, "LUIReagent")
+	tinsert(UISpecialFrames, "LUIBank")
+	tinsert(UISpecialFrames, "LUIWarband")
 
-	-- Close bags before Enabling/Disabling the module
-	-- _G.BankFrame:UnregisterAllEvents()
+	-- Prevent Blizzard bank UI from fighting LUI while the module is enabled.
+	module:SuppressBlizzardBankUI()
 	_G.CloseAllBags()
+end
+
+function module:OnBankTabSettingsUpdated(event, bankType)
+	local characterType = Enum.BankType and Enum.BankType.Character or 0
+	local accountType = Enum.BankType and Enum.BankType.Account or 2
+	if LUIBank and (bankType == nil or bankType == characterType) then
+		LUIBank:BankTabsUpdated()
+	end
+	if LUIWarband and (bankType == nil or bankType == accountType) then
+		LUIWarband:BankTabsUpdated()
+	end
+end
+
+function module:OnBankBagSlotsChanged()
+	if LUIBank and LUIBank:IsShown() then
+		LUIBank:BankTabsUpdated()
+	end
+	if LUIWarband and LUIWarband:IsShown() then
+		LUIWarband:BankTabsUpdated()
+	end
 end
 
 function module:OnDisable()
 	_G.CloseAllBags()
+	-- Undo ToggleBag / OpenBag hooks so Blizzard bags work without ReloadUI.
+	module:UnhookAll()
+	module:UnregisterEvent("BANKFRAME_OPENED")
+	module:UnregisterEvent("BANKFRAME_CLOSED")
+	module:UnregisterEvent("BANK_TAB_SETTINGS_UPDATED")
+	module:UnregisterEvent("PLAYERBANKBAGSLOTS_CHANGED")
 
-	-- Bank
-	-- _G.BankFrame:RegisterEvent("BANKFRAME_OPENED")
-	-- _G.BankFrame:RegisterEvent("BANKFRAME_CLOSED")
+	if _G.BankFrame then
+		_G.BankFrame:RegisterEvent("BANKFRAME_OPENED")
+		_G.BankFrame:RegisterEvent("BANKFRAME_CLOSED")
+	end
 end

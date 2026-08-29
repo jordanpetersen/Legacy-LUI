@@ -126,7 +126,7 @@ end
 --Went with a return-less approach that you need to provide the sort table because otherwise,
 --I would need to create a new table every single call, and that would create needless garbage.\
 
---- Returns a sorted table to work it by filling the array portion of `sortT` with the keys of `origT`, then sorting the results.  
+--- Returns a sorted table to work it by filling the array portion of `sortT` with the keys of `origT`, then sorting the results.
 --- Then we can just use a loop to get the sorted results with original[ sorted[i] ] for the value.
 ---@param sortT table Table that will be wiped to contain the sorting order.
 ---@param origT table Original dictionary table that contains list of keys to be sorted.
@@ -207,6 +207,83 @@ function LUI:PrintObjectTree(tbl, msg, recurse)
 end
 
 -- ####################################################################################################################
+-- ##### Secret Value Helpers #########################################################################################
+-- ####################################################################################################################
+-- Retail secret values cannot be read, compared, or passed into many APIs. Centralize the checks so unitframes and
+-- other modules can fall back cleanly instead of erroring.
+
+local issecretvalue = _G.issecretvalue
+local UnitExists = _G.UnitExists
+local UnitGUID = _G.UnitGUID
+local UnitIsConnected = _G.UnitIsConnected
+local UnitIsVisible = _G.UnitIsVisible
+
+--- Return value unless it is a Blizzard secret value, in which case return fallback.
+---@param value any
+---@param fallback any
+---@return any
+function LUI:SecretSafe(value, fallback)
+	if issecretvalue and issecretvalue(value) then
+		return fallback
+	end
+	return value
+end
+
+--- True when unit exists and GUID / connected / visible are safe to use for model or portrait work.
+---@param unit string
+---@return boolean
+function LUI:CanUseUnitInfo(unit)
+	if not unit or not UnitExists(unit) then
+		return false
+	end
+	local guid = UnitGUID(unit)
+	if issecretvalue and issecretvalue(guid) then
+		return false
+	end
+	local connected = UnitIsConnected(unit)
+	if issecretvalue and issecretvalue(connected) then
+		return false
+	end
+	if not connected then
+		return false
+	end
+	local visible = UnitIsVisible(unit)
+	if issecretvalue and issecretvalue(visible) then
+		return false
+	end
+	return not not visible
+end
+
+--- Safe GetRGB from a ColorMixin / color object; returns fallback r,g,b when secret or missing.
+---@param color any
+---@param fallbackR number|nil
+---@param fallbackG number|nil
+---@param fallbackB number|nil
+---@return number, number, number
+function LUI:SecretSafeColorRGB(color, fallbackR, fallbackG, fallbackB)
+	fallbackR = fallbackR or 1
+	fallbackG = fallbackG or 1
+	fallbackB = fallbackB or 1
+	if not color then
+		return fallbackR, fallbackG, fallbackB
+	end
+	if issecretvalue and issecretvalue(color) then
+		return fallbackR, fallbackG, fallbackB
+	end
+	if type(color) ~= "table" or type(color.GetRGB) ~= "function" then
+		local r = color.r or color[1]
+		local g = color.g or color[2]
+		local b = color.b or color[3]
+		return LUI:SecretSafe(r, fallbackR), LUI:SecretSafe(g, fallbackG), LUI:SecretSafe(b, fallbackB)
+	end
+	local ok, r, g, b = pcall(color.GetRGB, color)
+	if not ok then
+		return fallbackR, fallbackG, fallbackB
+	end
+	return LUI:SecretSafe(r, fallbackR), LUI:SecretSafe(g, fallbackG), LUI:SecretSafe(b, fallbackB)
+end
+
+-- ####################################################################################################################
 -- ##### Dev Functions ################################################################################################
 -- ####################################################################################################################
 
@@ -234,6 +311,8 @@ end
 -- To rectify this behaviour, you should set your UI scale so that your screen height matches with the UI coordinates.
 
 local mult = 1
+local GetPhysicalScreenSize = _G.GetPhysicalScreenSize
+local tonumber = _G.tonumber
 
 --- Updates the scale factor for Scaling calculations. Only needs to be called at login or when resolution changes.
 function LUI:UpdateScaleMultiplier()

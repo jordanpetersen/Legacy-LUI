@@ -27,8 +27,10 @@ local SetPortraitTexture, UnitHasVehicleUI = _G.SetPortraitTexture, _G.UnitHasVe
 local UnitClass, UnitLevel, GetPVPTimer = _G.UnitClass, _G.UnitLevel, _G.GetPVPTimer
 local GetShapeshiftFormID = _G.GetShapeshiftFormID
 local DebuffTypeColor =  _G.DebuffTypeColor
+local issecretvalue = _G.issecretvalue
 local format = string.format
 local floor = math.floor
+local pcall = _G.pcall
 
 local function GetUnitClassColor(unit)
 	local _, class = UnitClass(unit)
@@ -336,6 +338,7 @@ local function UpdateHealthDisplay(self, unit, current, max)
 		health.valuePercent:SetText(health.valuePercent.ShowDead and "|cffD7BEA5<Dead>|r" or "")
 		health.valueMissing:SetText("")
 	else
+		-- Percent / alpha curves may return secrets; pass them into FontString APIs directly.
 		local healthPercent = UnitHealthPercent(unit, false, PercentCurve)
 		local notFullAlpha = UnitHealthPercent(unit, true, NotFullCurve)
 
@@ -351,7 +354,7 @@ local function UpdateHealthDisplay(self, unit, current, max)
 			elseif health.value.Format == "Absolut & Percent" then
 				health.value:SetFormattedText("%s/%s | %.1f%%", current, max, healthPercent)
 			elseif health.value.Format == "Absolut Short" then
-				health.value:SetFormattedText("%s/%s", AbbreviateNumbers(current), AbbreviateNumbers(max))
+				health.value:SetFormattedText("%s/%s", FormatUnitNumber(current, true), FormatUnitNumber(max, true))
 			elseif health.value.Format == "Absolut Short & Percent" then
 				health.value:SetFormattedText("%s/%s | %.1f%%", AbbreviateNumbers(current), AbbreviateNumbers(max), healthPercent)
 			elseif health.value.Format == "Standard" then
@@ -359,9 +362,9 @@ local function UpdateHealthDisplay(self, unit, current, max)
 			elseif health.value.Format == "Standard & Percent" then
 				health.value:SetFormattedText("%s | %.1f%%", current, healthPercent)
 			elseif health.value.Format == "Standard Short" then
-				health.value:SetFormattedText("%s", AbbreviateNumbers(current))
+				health.value:SetFormattedText("%s", FormatUnitNumber(current, true))
 			elseif health.value.Format == "Standard Short & Percent" then
-				health.value:SetFormattedText("%s | %.1f%%", AbbreviateNumbers(current), healthPercent)
+				health.value:SetFormattedText("%s | %.1f%%", FormatUnitNumber(current, true), healthPercent)
 			else
 				health.value:SetFormattedText("%s", current)
 			end
@@ -893,6 +896,7 @@ local function PostUpdateAlternativePower(altpowerbar, unit, cur, min, max)
 
 	if altpowerbar.color == "By Class" then
 		altpowerbar:GetStatusBarTexture():SetVertexColor(unpack(color))
+		r, g, b = unpack(color)
 	elseif altpowerbar.color == "Individual" then
 		altpowerbar:GetStatusBarTexture():SetVertexColor(altpowerbar.colorIndividual.r, altpowerbar.colorIndividual.g, altpowerbar.colorIndividual.b)
 	elseif tex then
@@ -947,9 +951,8 @@ local function PostUpdateAdditionalPower(additionalpower, cur, max)
 
 	local bg = additionalpower.bg
 
-	if bg then
+	if bg and r then
 		local mu = bg.multiplier or 1
-		local r, g, b = additionalpower:GetStatusBarColor()
 		bg:SetVertexColor(r * mu, g * mu, b * mu)
 	end
 
@@ -1024,29 +1027,66 @@ local function PortraitOverride(self, event, unit)
 	if not unit or not UnitIsUnit(self.__unit, unit) then return end
 
 	local portrait = self.Portrait
+	local portrait2D = self.Portrait2D
+	local guid = LUI:SecretSafe(UnitGUID(unit), nil)
 
-	if(portrait:IsObjectType"Model") then
-		local guid = UnitGUID(unit)
-		if not UnitExists(unit) or not UnitIsConnected(unit) or not UnitIsVisible(unit) then
-			portrait:SetModelScale(4.25)
-			portrait:SetPosition(0, 0, -1.5)
-			portrait:SetModel("Interface\\Buttons\\talktomequestionmark.mdx")
+	local function use2D()
+		if portrait then
+			portrait:Hide()
 			portrait.guid = nil
-		elseif(portrait.guid ~= guid or event == "UNIT_MODEL_CHANGED") then
-			portrait:SetUnit(unit)
-			portrait:SetCamera(portrait:GetModel() == "character\\worgen\\male\\worgenmale.m2" and 1 or 0)
-
-			portrait.guid = guid
-		else
-			portrait:SetCamera(portrait:GetModel() == "character\\worgen\\male\\worgenmale.m2" and 1 or 0)
 		end
-	else
-		SetPortraitTexture(portrait, unit)
+		if not portrait2D then return end
+		portrait2D:Show()
+		local ok = pcall(SetPortraitTexture, portrait2D, unit)
+		if not ok then
+			portrait2D:SetTexture([[Interface\Icons\INV_Misc_QuestionMark]])
+		end
 	end
 
-	local a = portrait:GetAlpha()
-	portrait:SetAlpha(0)
-	portrait:SetAlpha(a)
+	local function use3DUnavailable()
+		if portrait2D then portrait2D:Hide() end
+		if not portrait then return end
+		portrait:Show()
+		portrait:SetCamDistanceScale(0.25)
+		portrait:SetPortraitZoom(0)
+		portrait:SetPosition(0, 0, 0.25)
+		portrait:ClearModel()
+		portrait:SetModel([[Interface\Buttons\TalkToMeQuestionMark.m2]])
+		portrait.guid = nil
+	end
+
+	local function use3D()
+		if portrait2D then portrait2D:Hide() end
+		if not portrait then return end
+		portrait:Show()
+		portrait:SetCamDistanceScale(1)
+		portrait:SetPortraitZoom(1)
+		portrait:SetPosition(0, 0, 0)
+		portrait:ClearModel()
+		local ok = pcall(portrait.SetUnit, portrait, unit)
+		if not ok then
+			use2D()
+			return
+		end
+		portrait.guid = guid
+	end
+
+	if LUI:CanUseUnitInfo(unit) then
+		if portrait.guid ~= guid or event == "UNIT_MODEL_CHANGED" or event == "ForceUpdate" then
+			use3D()
+		end
+	elseif UnitExists(unit) then
+		-- Prefer 2D when 3D unit/GUID/model info is blocked
+		use2D()
+	else
+		use3DUnavailable()
+	end
+
+	if portrait and portrait:IsShown() then
+		local a = portrait:GetAlpha()
+		portrait:SetAlpha(0)
+		portrait:SetAlpha(a)
+	end
 end
 
 local function Reposition(V2Tex)
@@ -2041,7 +2081,12 @@ module.funcs = {
 		if not self.Portrait then
 			self.Portrait = CreateFrame("PlayerModel", nil, self)
 			self.Portrait:SetFrameLevel(5)
-			--self.Portrait.Override = PortraitOverride
+			self.Portrait.Override = PortraitOverride
+		end
+
+		if not self.Portrait2D then
+			self.Portrait2D = self:CreateTexture(nil, "ARTWORK", nil, 1)
+			self.Portrait2D:Hide()
 		end
 
 		self.Portrait:SetHeight(oufdb.Portrait.Height)
@@ -2049,6 +2094,12 @@ module.funcs = {
 		self.Portrait:SetAlpha(oufdb.Portrait.Alpha)
 		self.Portrait:ClearAllPoints()
 		self.Portrait:SetPoint("TOPLEFT", self, "TOPLEFT", oufdb.Portrait.X * self:GetWidth() / oufdb.Width, oufdb.Portrait.Y) -- needed for 25/40 man raid width downscaling!
+
+		self.Portrait2D:SetHeight(oufdb.Portrait.Height)
+		self.Portrait2D:SetWidth(oufdb.Portrait.Width * self:GetWidth() / oufdb.Width)
+		self.Portrait2D:SetAlpha(oufdb.Portrait.Alpha)
+		self.Portrait2D:ClearAllPoints()
+		self.Portrait2D:SetPoint("TOPLEFT", self, "TOPLEFT", oufdb.Portrait.X * self:GetWidth() / oufdb.Width, oufdb.Portrait.Y)
 	end,
 
 	Buffs = function(self, unit, oufdb)
@@ -2073,8 +2124,8 @@ module.funcs = {
 		self.Buffs:ClearAllPoints()
 		self.Buffs:SetPoint(oufdb.Aura.Buffs.InitialAnchor, self, oufdb.Aura.Buffs.InitialAnchor, oufdb.Aura.Buffs.X, oufdb.Aura.Buffs.Y)
 		self.Buffs.initialAnchor = oufdb.Aura.Buffs.InitialAnchor
-		self.Buffs["growth-y"] = oufdb.Aura.Buffs.GrowthY
-		self.Buffs["growth-x"] = oufdb.Aura.Buffs.GrowthX
+		self.Buffs.growthY = oufdb.Aura.Buffs.GrowthY
+		self.Buffs.growthX = oufdb.Aura.Buffs.GrowthX
 		self.Buffs.onlyShowPlayer = oufdb.Aura.Buffs.PlayerOnly
 		self.Buffs.includePet = oufdb.Aura.Buffs.IncludePet
 		self.Buffs.showStealableBuffs = (unit ~= "player" and (LUI.MAGE or LUI.SHAMAN))
@@ -2141,8 +2192,8 @@ module.funcs = {
 		self.Debuffs:ClearAllPoints()
 		self.Debuffs:SetPoint(oufdb.Aura.Debuffs.InitialAnchor, self, oufdb.Aura.Debuffs.InitialAnchor, oufdb.Aura.Debuffs.X, oufdb.Aura.Debuffs.Y)
 		self.Debuffs.initialAnchor = oufdb.Aura.Debuffs.InitialAnchor
-		self.Debuffs["growth-y"] = oufdb.Aura.Debuffs.GrowthY
-		self.Debuffs["growth-x"] = oufdb.Aura.Debuffs.GrowthX
+		self.Debuffs.growthY = oufdb.Aura.Debuffs.GrowthY
+		self.Debuffs.growthX = oufdb.Aura.Debuffs.GrowthX
 		self.Debuffs.onlyShowPlayer = oufdb.Aura.Debuffs.PlayerOnly
 		self.Debuffs.includePet = oufdb.Aura.Debuffs.IncludePet
 		self.Debuffs.fadeOthers = oufdb.Aura.Debuffs.FadeOthers
@@ -2373,8 +2424,7 @@ module.funcs = {
 		end
 
 		if unit == "player" then
-			-- HACK: Disable Latency until properly re-implemented
-			if oufdb.Castbar.General.Latency == true and false then
+			if oufdb.Castbar.General.Latency == true then
 				castbar.SafeZone:Show()
 				if oufdb.Castbar.General.IndividualColor == true then
 					castbar.SafeZone:SetVertexColor(oufdb.Castbar.Colors.Latency.r,oufdb.Castbar.Colors.Latency.g,oufdb.Castbar.Colors.Latency.b,oufdb.Castbar.Colors.Latency.a)

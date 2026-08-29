@@ -160,6 +160,7 @@ end
 function module:OnEnable()
 	LUI.Profiler.TraceScope(module, "Unitframes", "LUI", 2)
 	for _, unit in pairs(module.unitsSpawn) do module.ToggleUnit(unit) end
+	module:UpdateBlizzardPlayerAuras()
 end
 
 function module:OnDisable()

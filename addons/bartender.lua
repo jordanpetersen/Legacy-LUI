@@ -21,13 +21,13 @@ local function InstallBartender(self)
 		[CharName] = {
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.203, 0.203, 0.203, 1},
-					["Pushed"] = {1, 1, 1, 0.319},
-					["Highlight"] = {1, 1, 1, 1},
-					["Gloss"] = {0.980, 0.980, 0.980, 1},
-					["Backdrop"] = {0.980, 1, 0.968, 1},
-					["Border"] = {0.082, 1, 0.043, 1},
-					["Checked"] = {0.988, 1, 0.984, 1},
+					["Normal"] = { 0.203, 0.203, 0.203, 1 },
+					["Pushed"] = { 1, 1, 1, 0.319 },
+					["Highlight"] = { 1, 1, 1, 1 },
+					["Gloss"] = { 0.980, 0.980, 0.980, 1 },
+					["Backdrop"] = { 0.980, 1, 0.968, 1 },
+					["Border"] = { 0.082, 1, 0.043, 1 },
+					["Checked"] = { 0.988, 1, 0.984, 1 },
 				},
 				["ID"] = "Caith",
 				["Backdrop"] = false,
@@ -43,7 +43,7 @@ local function InstallBartender(self)
 		},
 	}
 
-	for k,v in pairs(BagBarDefaults) do
+	for k, v in pairs(BagBarDefaults) do
 		Bartender4DB.namespaces.BagBar.profiles[k] = v
 	end
 
@@ -55,15 +55,15 @@ local function InstallBartender(self)
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -90,15 +90,15 @@ local function InstallBartender(self)
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -123,14 +123,14 @@ local function InstallBartender(self)
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Disabled"] = {0.988, 1, 0.949, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {0.980, 0.980, 0.980, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 0.980, 0.980, 0.980, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -157,15 +157,15 @@ local function InstallBartender(self)
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -192,15 +192,15 @@ local function InstallBartender(self)
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -228,15 +228,15 @@ local function InstallBartender(self)
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -263,14 +263,14 @@ local function InstallBartender(self)
 					["rows"] = 6,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Disabled"] = {0.988, 1, 0.949, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {0.980, 0.980, 0.980, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 0.980, 0.980, 0.980, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -297,14 +297,14 @@ local function InstallBartender(self)
 					["rows"] = 6,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Disabled"] = {0.988, 1, 0.949, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {0.980, 0.980, 0.980, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 0.980, 0.980, 0.980, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -331,15 +331,15 @@ local function InstallBartender(self)
 					["rows"] = 6,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Gloss"] = {1, 1, 1, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -366,12 +366,12 @@ local function InstallBartender(self)
 					["rows"] = 6,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
 						},
 						["Gloss"] = 0.3,
 						["ID"] = "Darion",
@@ -423,7 +423,7 @@ local function InstallBartender(self)
 		end
 	end
 
-	for k,v in pairs(ActionBarsDefaults) do
+	for k, v in pairs(ActionBarsDefaults) do
 		Bartender4DB.namespaces.ActionBars.profiles[k] = v
 	end
 
@@ -433,14 +433,14 @@ local function InstallBartender(self)
 			["fadeoutalpha"] = 1,
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.133, 0.133, 0.133, 0.950},
-					["Pushed"] = {0.321, 0.321, 0.321, 1},
-					["Highlight"] = {0.403, 0.403, 0.403, 1},
-					["Checked"] = {0.011, 0.011, 0.011, 0},
-					["Gloss"] = {1, 1, 1, 1},
-					["Border"] = {0.407, 0.403, 0.411, 1},
-					["Backdrop"] = {0.109, 0.109, 0.109, 1},
-					["Flash"] = {1, 0, 0, 1},
+					["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+					["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+					["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+					["Checked"] = { 0.011, 0.011, 0.011, 0 },
+					["Gloss"] = { 1, 1, 1, 1 },
+					["Border"] = { 0.407, 0.403, 0.411, 1 },
+					["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+					["Flash"] = { 1, 0, 0, 1 },
 				},
 				["Gloss"] = 0.3,
 				["ID"] = "Darion",
@@ -461,7 +461,7 @@ local function InstallBartender(self)
 		},
 	}
 
-	for k,v in pairs(VehicleDefaults) do
+	for k, v in pairs(VehicleDefaults) do
 		Bartender4DB.namespaces.Vehicle.profiles[k] = v
 	end
 
@@ -475,15 +475,15 @@ local function InstallBartender(self)
 			},
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.133, 0.133, 0.133, 0.950},
-					["Pushed"] = {0.321, 0.321, 0.321, 1},
-					["Highlight"] = {0.403, 0.403, 0.403, 1},
-					["Gloss"] = {1, 1, 1, 1},
-					["Backdrop"] = {0.109, 0.109, 0.109, 1},
-					["Flash"] = {1, 0, 0, 1},
-					["Border"] = {0.407, 0.403, 0.411, 1},
-					["Checked"] = {0.011, 0.011, 0.011, 0},
-					["Disabled"] = {0.988, 1, 0.949, 1},
+					["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+					["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+					["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+					["Gloss"] = { 1, 1, 1, 1 },
+					["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+					["Flash"] = { 1, 0, 0, 1 },
+					["Border"] = { 0.407, 0.403, 0.411, 1 },
+					["Checked"] = { 0.011, 0.011, 0.011, 0 },
+					["Disabled"] = { 0.988, 1, 0.949, 1 },
 				},
 				["Gloss"] = 0.3,
 				["ID"] = "Darion",
@@ -501,7 +501,7 @@ local function InstallBartender(self)
 		},
 	}
 
-	for k,v in pairs(StanceBarDefaults) do
+	for k, v in pairs(StanceBarDefaults) do
 		Bartender4DB.namespaces.StanceBar.profiles[k] = v
 	end
 
@@ -521,20 +521,20 @@ local function InstallBartender(self)
 			},
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.133, 0.133, 0.133, 0.950},
-					["Pushed"] = {0.321, 0.321, 0.321, 1},
-					["Highlight"] = {0.450, 0.450, 0.450, 1},
-					["Gloss"] = {1, 1, 1, 1},
-					["Backdrop"] = {0.109, 0.109, 0.109, 1},
-					["Flash"] = {1, 0, 0, 1},
-					["Border"] = {0.407, 0.403, 0.411, 1},
+					["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+					["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+					["Highlight"] = { 0.450, 0.450, 0.450, 1 },
+					["Gloss"] = { 1, 1, 1, 1 },
+					["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+					["Flash"] = { 1, 0, 0, 1 },
+					["Border"] = { 0.407, 0.403, 0.411, 1 },
 					["Checked"] = {
 						0.6, -- [1]
 						0.6, -- [2]
 						0.6, -- [3]
 						1, -- [4]
 					},
-					["Disabled"] = {0.988, 1, 0.949, 1},
+					["Disabled"] = { 0.988, 1, 0.949, 1 },
 				},
 				["ID"] = "Darion",
 				["Gloss"] = 0.3,
@@ -542,7 +542,7 @@ local function InstallBartender(self)
 		},
 	}
 
-	for k,v in pairs(PetBarDefaults) do
+	for k, v in pairs(PetBarDefaults) do
 		Bartender4DB.namespaces.PetBar.profiles[k] = v
 	end
 
@@ -553,8 +553,8 @@ local function InstallBartender(self)
 			["show"] = "alwayshide",
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.133, 0.133, 0.133, 1},
-					["Border"] = {0.392, 0.388, 0.396, 1},
+					["Normal"] = { 0.133, 0.133, 0.133, 1 },
+					["Border"] = { 0.392, 0.388, 0.396, 1 },
 				},
 				["ID"] = "Caith",
 				["Backdrop"] = false,
@@ -568,7 +568,7 @@ local function InstallBartender(self)
 		},
 	}
 
-	for k,v in pairs(MicroMenuDefaults) do
+	for k, v in pairs(MicroMenuDefaults) do
 		Bartender4DB.namespaces.MicroMenu.profiles[k] = v
 	end
 
@@ -583,19 +583,20 @@ local function InstallBartender(self)
 		},
 	}
 
-	for k,v in pairs(BTProfilesDefaults) do
+	for k, v in pairs(BTProfilesDefaults) do
 		Bartender4DB.profiles[k] = v
 	end
 
 	if Bartender4DB.profileKeys[LUI.profileName] == nil then
-		tinsert(Bartender4DB.profileKeys,LUI.profileName)
+		tinsert(Bartender4DB.profileKeys, LUI.profileName)
 		Bartender4DB.profileKeys[LUI.profileName] = CharName
 	elseif Bartender4DB.profileKeys[LUI.profileName] ~= CharName then
 		Bartender4DB.profileKeys[LUI.profileName] = CharName
 	end
 	_G.Bartender4:UpdateModuleConfigs()
 
-	if LUI.db.global.luiconfig[LUI.profileName].Versions then LUI.db.global.luiconfig[LUI.profileName].Versions.bartender = LUI.Versions.bartender end
+	if LUI.db.global.luiconfig[LUI.profileName].Versions then LUI.db.global.luiconfig[LUI.profileName].Versions.bartender =
+		LUI.Versions.bartender end
 end
 
 -- Updating Bartender's module configuration rebuilds secure action buttons.
