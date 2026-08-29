@@ -16,7 +16,7 @@ local oUF = LUI.oUF
 
 local UnitIsConnected, UnitIsGhost, UnitIsDead, UnitIsAFK = _G.UnitIsConnected, _G.UnitIsGhost, _G.UnitIsDead, _G.UnitIsAFK
 local UnitPower, UnitPowerMax, UnitPowerType = _G.UnitPower, _G.UnitPowerMax, _G.UnitPowerType
-local UnitClass, UnitLevel, UnitReaction = _G.UnitClass, _G.UnitLevel, _G.UnitReaction
+local UnitClass, UnitLevel = _G.UnitClass, _G.UnitLevel
 local UnitQuestTrivialLevelRange = _G.UnitQuestTrivialLevelRange
 local UnitIsPlayer, UnitName = _G.UnitIsPlayer, _G.UnitName
 
@@ -98,34 +98,46 @@ function module.RecreateNameCache()
 	end
 end
 
+local function GetClassColorMarkup(unit)
+	local _, class = UnitClass(unit)
+
+	local color
+	if issecretvalue(class) then
+		-- Match oUF 14.0.1: secret class tokens must be resolved through
+		-- Blizzard's class-color API instead of indexing custom color tables.
+		color = C_ClassColor.GetClassColor(class)
+	elseif class then
+		color = module.colors.class[class]
+	end
+
+	return color and color:GenerateHexColorMarkup() or nil
+end
+
+local function GetPowerColorMarkup(unit)
+	local pType, pToken, altR, altG, altB = UnitPowerType(unit)
+	local color = pToken and module.colors.power[pToken] or nil
+	if color then
+		return color:GenerateHexColorMarkup()
+	elseif altR then
+		if altR > 1 or altG > 1 or altB > 1 then
+			altR, altG, altB = altR / 255, altG / 255, altB / 255
+		end
+		return oUF:CreateColor(altR, altG, altB):GenerateHexColorMarkup()
+	end
+
+	color = module.colors.power[pType] or module.colors.power.MANA
+	return color and color:GenerateHexColorMarkup() or nil
+end
+
 --TagEvents["GetNameColor"] = "UNIT_HAPPINESS"
 function TagMethods.GetNameColor(unit)
-	local reaction = UnitReaction(unit, "player")
-	local pClass, pToken = UnitClass(unit)
-	local pClass2, pToken2 = UnitPowerType(unit)
-	local color = {LUI:GetClassColor(pToken)}
-	local color2 = {LUI:GetFallbackRGB(pToken2)}
-	
+	local classColor = GetClassColorMarkup(unit)
+	local powerColor = GetPowerColorMarkup(unit)
+
 	if UnitIsPlayer(unit) then
-		if color and next(color) then
-			return string.format("|cff%02x%02x%02x", color[1] * 255, color[2] * 255, color[3] * 255)
-		else
-			if color2 and next(color2) then
-				return string.format("|cff%02x%02x%02x", color2[1] * 255, color2[2] * 255, color2[3] * 255)
-			else
-				return string.format("|cff%02x%02x%02x", 0.8 * 255, 0.8 * 255, 0.8 * 255)
-			end
-		end
+		return classColor or powerColor or "|cffcccccc"
 	else
-		if color2 and next(color2) then
-			return string.format("|cff%02x%02x%02x", color2[1] * 255, color2[2] * 255, color2[3] * 255)
-		else
-			if color and next(color) then
-				return string.format("|cff%02x%02x%02x", color[1] * 255, color[2] * 255, color[3] * 255)
-			else
-				return string.format("|cff%02x%02x%02x", 0.8 * 255, 0.8 * 255, 0.8 * 255)
-			end
-		end
+		return powerColor or classColor or "|cffcccccc"
 	end
 end
 
@@ -133,10 +145,15 @@ TagEvents["DiffColor"] = "UNIT_LEVEL"
 function TagMethods.DiffColor(unit)
 	local r, g, b
 	local level = UnitLevel(unit)
+	if level == nil or issecretvalue(level) then
+		return "|cffcccccc"
+	end
 	if level < 1 then
 		r, g, b = unpack(module.colors.leveldiff[1])
 	else
-		local difference = level - UnitLevel("player")
+		local playerLevel = UnitLevel("player")
+		if playerLevel == nil or issecretvalue(playerLevel) then return "|cffcccccc" end
+		local difference = level - playerLevel
 		if difference >= 5 then
 			r, g, b = unpack(module.colors.leveldiff[1])
 		elseif difference >= 3 then
@@ -208,6 +225,8 @@ function TagMethods.RaidName25(unit, relativeUnit)
 		end
 	end
 	local name = unit == "vehicle" and UnitName(relativeUnit or unit) or UnitName(unit)
+	if name == nil then return "" end
+	if issecretvalue(name) then return name end
 	if not nameCache[name] then ShortenName(name) end
 	return nameCache[name][1]
 end
@@ -226,6 +245,8 @@ function TagMethods.RaidName40(unit, relativeUnit)
 		end
 	end
 	local name = unit == "vehicle" and UnitName(relativeUnit or unit) or UnitName(unit)
+	if name == nil then return "" end
+	if issecretvalue(name) then return name end
 	if not nameCache[name] then ShortenName(name) end
 	return nameCache[name][2]
 end
@@ -238,13 +259,13 @@ function TagMethods.additionalpower2(unit)
 	local db = module.db.profile.player.AdditionalPowerText
 
 	local min, max = UnitPower("player", Enum.PowerType.Mana), UnitPowerMax("player", Enum.PowerType.Mana)
-	--if db.HideIfFullMana and min == max then return "" end
 	local perc = UnitPowerPercent("player", Enum.PowerType.Mana)
+	if issecretvalue(min) or issecretvalue(max) or issecretvalue(perc) then return "" end
 
 	local _, pType = UnitPowerType(unit)
-	local pClass, pToken = UnitClass(unit)
-	local color = {LUI:GetClassColor(pToken)}
-	local color2 = {LUI:GetFallbackRGB(pType)}
+	local _, pToken = UnitClass(unit)
+	local color = (pToken ~= nil and not issecretvalue(pToken)) and {LUI:GetClassColor(pToken)} or {1, 1, 1}
+	local color2 = (pType ~= nil and not issecretvalue(pType)) and {LUI:GetFallbackRGB(pType)} or {1, 1, 1}
 
 	local r, g, b, text
 

@@ -16,17 +16,19 @@ local oUF = LUI.oUF
 
 local MAX_BOSS_FRAMES = _G.MAX_BOSS_FRAMES
 
-local UnregisterStateDriver = _G.UnregisteredStateDriver
+local UnregisterStateDriver = _G.UnregisterStateDriver
 local GetNumSubgroupMembers = _G.GetNumSubgroupMembers
 local RegisterStateDriver = _G.RegisterStateDriver
 local GetNumGroupMembers = _G.GetNumGroupMembers
 local InCombatLockdown = _G.InCombatLockdown
--- local IsAddOnLoaded = _G.IsAddOnLoadOnDemand
 local IsAddOnLoaded = C_AddOns.IsAddOnLoaded
 local GetCVarBool = _G.GetCVarBool
 local UnitLevel = _G.UnitLevel
 local IsInRaid = _G.IsInRaid
 local SetCVar = _G.SetCVar
+
+local supportsClassPower = LUI.DEMONHUNTER or LUI.DRUID or LUI.EVOKER or LUI.HUNTER or LUI.MAGE
+	or LUI.MONK or LUI.PALADIN or LUI.ROGUE or LUI.SHAMAN or LUI.WARLOCK
 
 local iconlist = {
 	PvP = {"PvPIndicator"},
@@ -38,45 +40,26 @@ local iconlist = {
 	ReadyCheck = {"ReadyCheckIndicator"},
 }
 
--- When LUI owns player-frame auras, keep Blizzard's Edit Mode buff/debuff bars hidden.
-local blizzardPlayerAuraHidden = false
-local blizzardPlayerAuraParent
-local blizzardPlayerAuraHooked = {}
+local indicatorDBKeys = {
+	PvP = "PvPIndicator",
+	Combat = "CombatIndicator",
+	Resting = "RestingIndicator",
+	Leader = "LeaderIndicator",
+	Role = "GroupRoleIndicator",
+	Raid = "RaidMarkerIndicator",
+	ReadyCheck = "ReadyCheckIndicator",
+}
 
-local function GetBlizzardPlayerAuraParent()
-	if not blizzardPlayerAuraParent then
-		blizzardPlayerAuraParent = CreateFrame("Frame", nil, UIParent)
-		blizzardPlayerAuraParent:SetAllPoints()
-		blizzardPlayerAuraParent:Hide()
-	end
-	return blizzardPlayerAuraParent
+local function GetFrameHeight(dbUnit)
+	return tonumber(dbUnit and dbUnit.Height) or 1
 end
 
-local function HideBlizzardPlayerAuraFrame(frame)
-	if not frame then return end
-	frame:UnregisterAllEvents()
-	frame:Hide()
-	frame:SetParent(GetBlizzardPlayerAuraParent())
-	if not blizzardPlayerAuraHooked[frame] then
-		hooksecurefunc(frame, "SetParent", function(self, parent)
-			if not blizzardPlayerAuraHidden then return end
-			if parent ~= GetBlizzardPlayerAuraParent() then
-				self:SetParent(GetBlizzardPlayerAuraParent())
-			end
-		end)
-		blizzardPlayerAuraHooked[frame] = true
-	end
+local function GetFootprintHeight(dbUnit)
+	return module.GetUnitFrameFootprintHeight(dbUnit)
 end
 
-function module:UpdateBlizzardPlayerAuras()
-	local aura = self.db and self.db.profile and self.db.profile.player and self.db.profile.player.Aura
-	local useLUI = aura and ((aura.Buffs and aura.Buffs.Enable) or (aura.Debuffs and aura.Debuffs.Enable))
-	blizzardPlayerAuraHidden = not not useLUI
-
-	if useLUI then
-		HideBlizzardPlayerAuraFrame(_G.BuffFrame)
-		HideBlizzardPlayerAuraFrame(_G.DebuffFrame)
-	end
+local function GetVerticalStackPadding(dbUnit)
+	return (tonumber(dbUnit and dbUnit.Padding) or 0) + module.GetUnitFrameStackOverflow(dbUnit)
 end
 
 local function GetOpposite(dir)
@@ -91,11 +74,33 @@ local function GetOpposite(dir)
 	end
 end
 
+local pendingUnitToggles = {}
+local pendingToggleFrame = CreateFrame("Frame")
+
+pendingToggleFrame:SetScript("OnEvent", function(self)
+	self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+
+	local queued = pendingUnitToggles
+	pendingUnitToggles = {}
+
+	for unit, request in pairs(queued) do
+		module.ToggleUnit(unit, request.override)
+	end
+end)
+
 local ToggleMT = {
 	__index = function(self)
 		return self.Default
 	end,
 	__call = function(self, unit, override)
+		-- Enabling or disabling oUF frames can touch secure state drivers.
+		-- Defer the complete unit refresh until combat has ended.
+		if InCombatLockdown() then
+			pendingUnitToggles[unit] = {override = override}
+			pendingToggleFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+			return
+		end
+
 		oUF:SetActiveStyle("LUI")
 		self[unit](override, unit)
 	end,
@@ -103,7 +108,7 @@ local ToggleMT = {
 
 -- Castbars for *target units are no longer supported as they had no event-driven updates 
 function module:UnitSupportsCastbar(unit)
-	return module.db.profile.Settings.Castbars and unit:match(".+target$")
+	return module.db.profile.Settings.Castbars and not unit:match(".+target$")
 end
 
 module.ToggleUnit = setmetatable({
@@ -141,6 +146,9 @@ module.ToggleUnit = setmetatable({
 		if override then
 			local x = dbUnit.X / dbUnit.Scale
 			local y = dbUnit.Y / dbUnit.Scale
+			local frameHeight = GetFrameHeight(dbUnit)
+			local footprintHeight = GetFootprintHeight(dbUnit)
+			local verticalPadding = GetVerticalStackPadding(dbUnit)
 
 			local growdir = dbUnit.GrowDirection
 			local opposite = GetOpposite(growdir)
@@ -150,8 +158,8 @@ module.ToggleUnit = setmetatable({
 				oUF_LUI_boss:ClearAllPoints()
 				oUF_LUI_boss:SetPoint(dbUnit.Point, UIParent, dbUnit.Point, x, y)
 				oUF_LUI_boss:SetWidth(dbUnit.Width)
-				oUF_LUI_boss:SetHeight(dbUnit.Height)
-				oUF_LUI_boss:SetAttribute("Height", dbUnit.Height)
+				oUF_LUI_boss:SetHeight(footprintHeight)
+				oUF_LUI_boss:SetAttribute("Height", footprintHeight)
 				oUF_LUI_boss:SetAttribute("Padding", dbUnit.Padding)
 				oUF_LUI_boss:Show()
 
@@ -168,9 +176,9 @@ module.ToggleUnit = setmetatable({
 						elseif growdir == "RIGHT" then
 							_G["oUF_LUI_boss"..i]:SetPoint(opposite, _G["oUF_LUI_boss"..i-1], growdir, dbUnit.Padding, 0)
 						elseif growdir == "TOP" then
-							_G["oUF_LUI_boss"..i]:SetPoint(opposite, _G["oUF_LUI_boss"..i-1], growdir, 0, dbUnit.Padding)
+							_G["oUF_LUI_boss"..i]:SetPoint(opposite, _G["oUF_LUI_boss"..i-1], growdir, 0, verticalPadding)
 						else
-							_G["oUF_LUI_boss"..i]:SetPoint(opposite, _G["oUF_LUI_boss"..i-1], growdir, 0, - dbUnit.Padding)
+							_G["oUF_LUI_boss"..i]:SetPoint(opposite, _G["oUF_LUI_boss"..i-1], growdir, 0, - verticalPadding)
 						end
 					end
 				end
@@ -179,8 +187,8 @@ module.ToggleUnit = setmetatable({
 				bossParent:SetScale(dbUnit.Scale)
 				bossParent:SetPoint(dbUnit.Point, UIParent, dbUnit.Point, x, y)
 				bossParent:SetWidth(dbUnit.Width)
-				bossParent:SetHeight(dbUnit.Height)
-				bossParent:SetAttribute("Height", dbUnit.Height)
+				bossParent:SetHeight(footprintHeight)
+				bossParent:SetAttribute("Height", footprintHeight)
 				bossParent:SetAttribute("Padding", dbUnit.Padding)
 				bossParent:Show()
 
@@ -208,9 +216,9 @@ module.ToggleUnit = setmetatable({
 						elseif growdir == "RIGHT" then
 							boss[i]:SetPoint(opposite, boss[i-1], growdir, dbUnit.Padding, 0)
 						elseif growdir == "TOP" then
-							boss[i]:SetPoint(opposite, boss[i-1], growdir, 0, dbUnit.Padding)
+							boss[i]:SetPoint(opposite, boss[i-1], growdir, 0, verticalPadding)
 						else
-							boss[i]:SetPoint(opposite, boss[i-1], growdir, 0, - dbUnit.Padding)
+							boss[i]:SetPoint(opposite, boss[i-1], growdir, 0, - verticalPadding)
 						end
 					end
 				end
@@ -269,6 +277,10 @@ module.ToggleUnit = setmetatable({
 			local dbParty = module.db.profile.party
 			local dbPartyTarget = module.db.profile.partytarget
 			local dbPartyPet = module.db.profile.partypet
+			local partyHeight = GetFrameHeight(dbParty)
+			local partyTargetHeight = GetFrameHeight(dbPartyTarget)
+			local partyPetHeight = GetFrameHeight(dbPartyPet)
+			local partyVerticalPadding = GetVerticalStackPadding(dbParty)
 
 			if oUF_LUI_party then
 				oUF_LUI_party:SetScale(dbUnit.Scale)
@@ -276,19 +288,19 @@ module.ToggleUnit = setmetatable({
 				oUF_LUI_party:SetPoint(dbUnit.Point, UIParent, dbUnit.Point, x, y)
 				oUF_LUI_party:SetAttribute("point", opposite)
 				oUF_LUI_party:SetAttribute("xOffset", growdir == "LEFT" and - dbUnit.Padding or dbUnit.Padding)
-				oUF_LUI_party:SetAttribute("yOffset", growdir == "BOTTOM" and - dbUnit.Padding or dbUnit.Padding)
+				oUF_LUI_party:SetAttribute("yOffset", growdir == "BOTTOM" and - partyVerticalPadding or partyVerticalPadding)
 				oUF_LUI_party:SetAttribute("showPlayer", dbUnit.ShowPlayer)
 				oUF_LUI_party:SetAttribute("oUF-initialConfigFunction", [[
 					local unit = ...
 					if unit == "party" then
-						self:SetHeight(]]..dbParty.Height..[[)
+						self:SetHeight(]]..partyHeight..[[)
 						self:SetWidth(]]..dbParty.Width..[[)
 					elseif unit == "partytarget" then
-						self:SetHeight(]]..dbPartyTarget.Height..[[)
+						self:SetHeight(]]..partyTargetHeight..[[)
 						self:SetWidth(]]..dbPartyTarget.Width..[[)
 						self:SetPoint("]]..dbPartyTarget.Point..[[", self:GetParent(), "]]..dbPartyTarget.RelativePoint..[[", ]]..dbPartyTarget.X..[[, ]]..dbPartyTarget.Y..[[)
 					elseif unit == "partypet" then
-						self:SetHeight(]]..dbPartyPet.Height..[[)
+						self:SetHeight(]]..partyPetHeight..[[)
 						self:SetWidth(]]..dbPartyPet.Width..[[)
 						self:SetPoint("]]..dbPartyPet.Point..[[", self:GetParent(), "]]..dbPartyPet.RelativePoint..[[", ]]..dbPartyPet.X..[[, ]]..dbPartyPet.Y..[[)
 					end
@@ -309,18 +321,18 @@ module.ToggleUnit = setmetatable({
 					"template", "oUF_LUI_party",
 					"point", opposite,
 					"xOffset", growdir == "LEFT" and - dbUnit.Padding or dbUnit.Padding,
-					"yOffset", growdir == "BOTTOM" and - dbUnit.Padding or dbUnit.Padding,
+					"yOffset", growdir == "BOTTOM" and - partyVerticalPadding or partyVerticalPadding,
 					"oUF-initialConfigFunction", [[
 						local unit = ...
 						if unit == "party" then
-							self:SetHeight(]]..dbParty.Height..[[)
+							self:SetHeight(]]..partyHeight..[[)
 							self:SetWidth(]]..dbParty.Width..[[)
 						elseif unit == "partytarget" then
-							self:SetHeight(]]..dbPartyTarget.Height..[[)
+							self:SetHeight(]]..partyTargetHeight..[[)
 							self:SetWidth(]]..dbPartyTarget.Width..[[)
 							self:SetPoint("]]..dbPartyTarget.Point..[[", self:GetParent(), "]]..dbPartyTarget.RelativePoint..[[", ]]..dbPartyTarget.X..[[, ]]..dbPartyTarget.Y..[[)
 						elseif unit == "partypet" then
-							self:SetHeight(]]..dbPartyPet.Height..[[)
+							self:SetHeight(]]..partyPetHeight..[[)
 							self:SetWidth(]]..dbPartyPet.Width..[[)
 							self:SetPoint("]]..dbPartyPet.Point..[[", self:GetParent(), "]]..dbPartyPet.RelativePoint..[[", ]]..dbPartyPet.X..[[, ]]..dbPartyPet.Y..[[)
 						end
@@ -433,13 +445,16 @@ module.ToggleUnit = setmetatable({
 		end
 	end,
 
-	Arena = function(override)
+	arena = function(override)
 		local dbUnit = module.db.profile.arena
 		if override == nil then override = dbUnit.Enable end
 
 		if override then
 			local x = dbUnit.X / dbUnit.Scale
 			local y = dbUnit.Y / dbUnit.Scale
+			local frameHeight = GetFrameHeight(dbUnit)
+			local footprintHeight = GetFootprintHeight(dbUnit)
+			local verticalPadding = GetVerticalStackPadding(dbUnit)
 
 			local growdir = dbUnit.GrowDirection
 			local opposite = GetOpposite(growdir)
@@ -449,8 +464,8 @@ module.ToggleUnit = setmetatable({
 				oUF_LUI_arena:ClearAllPoints()
 				oUF_LUI_arena:SetPoint(dbUnit.Point, UIParent, dbUnit.Point, x, y)
 				oUF_LUI_arena:SetWidth(dbUnit.Width)
-				oUF_LUI_arena:SetHeight(dbUnit.Height)
-				oUF_LUI_arena:SetAttribute("Height", dbUnit.Height)
+				oUF_LUI_arena:SetHeight(footprintHeight)
+				oUF_LUI_arena:SetAttribute("Height", footprintHeight)
 				oUF_LUI_arena:SetAttribute("Padding", dbUnit.Padding)
 				oUF_LUI_arena:Show()
 
@@ -467,9 +482,9 @@ module.ToggleUnit = setmetatable({
 						elseif growdir == "RIGHT" then
 							_G["oUF_LUI_arena"..i]:SetPoint(opposite, _G["oUF_LUI_arena"..i-1], growdir, dbUnit.Padding, 0)
 						elseif growdir == "TOP" then
-							_G["oUF_LUI_arena"..i]:SetPoint(opposite, _G["oUF_LUI_arena"..i-1], growdir, 0, dbUnit.Padding)
+							_G["oUF_LUI_arena"..i]:SetPoint(opposite, _G["oUF_LUI_arena"..i-1], growdir, 0, verticalPadding)
 						else
-							_G["oUF_LUI_arena"..i]:SetPoint(opposite, _G["oUF_LUI_arena"..i-1], growdir, 0, - dbUnit.Padding)
+							_G["oUF_LUI_arena"..i]:SetPoint(opposite, _G["oUF_LUI_arena"..i-1], growdir, 0, - verticalPadding)
 						end
 					end
 				end
@@ -482,8 +497,8 @@ module.ToggleUnit = setmetatable({
 				arenaParent:SetScale(dbUnit.Scale)
 				arenaParent:SetPoint(dbUnit.Point, UIParent, dbUnit.Point, x, y)
 				arenaParent:SetWidth(dbUnit.Width)
-				arenaParent:SetHeight(dbUnit.Height)
-				arenaParent:SetAttribute("Height", dbUnit.Height)
+				arenaParent:SetHeight(footprintHeight)
+				arenaParent:SetAttribute("Height", footprintHeight)
 				arenaParent:SetAttribute("Padding", dbUnit.Padding)
 				arenaParent:Show()
 
@@ -511,16 +526,16 @@ module.ToggleUnit = setmetatable({
 						elseif growdir == "RIGHT" then
 							arena[i]:SetPoint(opposite, arena[i-1], growdir, dbUnit.Padding, 0)
 						elseif growdir == "TOP" then
-							arena[i]:SetPoint(opposite, arena[i-1], growdir, 0, dbUnit.Padding)
+							arena[i]:SetPoint(opposite, arena[i-1], growdir, 0, verticalPadding)
 						else
-							arena[i]:SetPoint(opposite, arena[i-1], growdir, 0, - dbUnit.Padding)
+							arena[i]:SetPoint(opposite, arena[i-1], growdir, 0, - verticalPadding)
 						end
 					end
 				end
 			end
 
-			module.ToggleUnit("Arenatarget")
-			module.ToggleUnit("Arenapet")
+			module.ToggleUnit("arenatarget")
+			module.ToggleUnit("arenapet")
 		else
 			if dbUnit.UseBlizzard == true then
 				if not GetCVarBool("showArenaEnemyFrames") then
@@ -535,12 +550,12 @@ module.ToggleUnit = setmetatable({
 				end
 			end
 
-			module.ToggleUnit("Arenatarget", false)
-			module.ToggleUnit("Arenapet", false)
+			module.ToggleUnit("arenatarget", false)
+			module.ToggleUnit("arenapet", false)
 		end
 	end,
 
-	Arenatarget = function(override)
+	arenatarget = function(override)
 		local dbUnit = module.db.profile.arenatarget
 		if override == nil then override = dbUnit.Enable end
 
@@ -563,7 +578,7 @@ module.ToggleUnit = setmetatable({
 		end
 	end,
 
-	Arenapet = function(override)
+	arenapet = function(override)
 		local dbUnit = module.db.profile.arenapet
 		if override == nil then override = dbUnit.Enable end
 
@@ -586,7 +601,7 @@ module.ToggleUnit = setmetatable({
 		end
 	end,
 
-	Maintank = function(override)
+	maintank = function(override)
 		local dbUnit = module.db.profile.maintank
 		if override == nil then override = dbUnit.Enable end
 
@@ -600,6 +615,10 @@ module.ToggleUnit = setmetatable({
 			local dbTank = module.db.profile.maintank
 			local dbTankTarget = module.db.profile.maintanktarget
 			local dbTankToT = module.db.profile.maintanktargettarget
+			local tankHeight = GetFrameHeight(dbTank)
+			local tankTargetHeight = GetFrameHeight(dbTankTarget)
+			local tankToTHeight = GetFrameHeight(dbTankToT)
+			local tankVerticalPadding = GetVerticalStackPadding(dbTank)
 
 			if oUF_LUI_maintank then
 				oUF_LUI_maintank:SetScale(dbUnit.Scale)
@@ -607,19 +626,19 @@ module.ToggleUnit = setmetatable({
 				oUF_LUI_maintank:SetPoint(dbUnit.Point, UIParent, dbUnit.Point, x, y)
 				oUF_LUI_maintank:SetAttribute("point", opposite)
 				oUF_LUI_maintank:SetAttribute("xOffset", growdir == "LEFT" and - dbUnit.Padding or dbUnit.Padding)
-				oUF_LUI_maintank:SetAttribute("yOffset", growdir == "BOTTOM" and - dbUnit.Padding or dbUnit.Padding)
+				oUF_LUI_maintank:SetAttribute("yOffset", growdir == "BOTTOM" and - tankVerticalPadding or tankVerticalPadding)
 				oUF_LUI_maintank:SetAttribute("oUF-initialConfigFunction", [[
 					local unit = ...
 					if unit == "maintanktargettarget" then
-						self:SetHeight(]]..dbTankToT.Height..[[)
+						self:SetHeight(]]..tankToTHeight..[[)
 						self:SetWidth(]]..dbTankToT.Width..[[)
 						self:SetPoint("]]..dbTankToT.Point..[[", self:GetParent(), "]]..dbTankToT.RelativePoint..[[", ]]..dbTankToT.X..[[, ]]..dbTankToT.Y..[[)
 					elseif unit == "maintanktarget" then
-						self:SetHeight(]]..dbTankTarget.Height..[[)
+						self:SetHeight(]]..tankTargetHeight..[[)
 						self:SetWidth(]]..dbTankTarget.Width..[[)
 						self:SetPoint("]]..dbTankTarget.Point..[[", self:GetParent(), "]]..dbTankTarget.RelativePoint..[[", ]]..dbTankTarget.X..[[, ]]..dbTankTarget.Y..[[)
 					elseif unit == "maintank" then
-						self:SetHeight(]]..dbTank.Height..[[)
+						self:SetHeight(]]..tankHeight..[[)
 						self:SetWidth(]]..dbTank.Width..[[)
 					end
 				]])
@@ -641,19 +660,19 @@ module.ToggleUnit = setmetatable({
 					"unitsPerColumn", 4,
 					"point", opposite,
 					"xOffset", growdir == "LEFT" and - dbUnit.Padding or dbUnit.Padding,
-					"yOffset", growdir == "BOTTOM" and - dbUnit.Padding or dbUnit.Padding,
+					"yOffset", growdir == "BOTTOM" and - tankVerticalPadding or tankVerticalPadding,
 					"oUF-initialConfigFunction", [[
 						local unit = ...
 						if unit == "maintanktargettarget" then
-							self:SetHeight(]]..dbTankToT.Height..[[)
+							self:SetHeight(]]..tankToTHeight..[[)
 							self:SetWidth(]]..dbTankToT.Width..[[)
 							self:SetPoint("]]..dbTankToT.Point..[[", self:GetParent(), "]]..dbTankToT.RelativePoint..[[", ]]..dbTankToT.X..[[, ]]..dbTankToT.Y..[[)
 						elseif unit == "maintanktarget" then
-							self:SetHeight(]]..dbTankTarget.Height..[[)
+							self:SetHeight(]]..tankTargetHeight..[[)
 							self:SetWidth(]]..dbTankTarget.Width..[[)
 							self:SetPoint("]]..dbTankTarget.Point..[[", self:GetParent(), "]]..dbTankTarget.RelativePoint..[[", ]]..dbTankTarget.X..[[, ]]..dbTankTarget.Y..[[)
 						elseif unit == "maintank" then
-							self:SetHeight(]]..dbTank.Height..[[)
+							self:SetHeight(]]..tankHeight..[[)
 							self:SetWidth(]]..dbTank.Width..[[)
 						end
 					]]
@@ -664,7 +683,7 @@ module.ToggleUnit = setmetatable({
 				tank:Show()
 			end
 
-			module.ToggleUnit("Maintanktarget")
+			module.ToggleUnit("maintanktarget")
 		else
 			if oUF_LUI_maintank then
 				oUF_LUI_maintank:Hide()
@@ -675,11 +694,11 @@ module.ToggleUnit = setmetatable({
 				end
 			end
 
-			module.ToggleUnit("Maintanktarget", false)
+			module.ToggleUnit("maintanktarget", false)
 		end
 	end,
 
-	Maintanktarget = function(override)
+	maintanktarget = function(override)
 		local dbUnit = module.db.profile.maintanktarget
 		if override == nil then override = dbUnit.Enable end
 
@@ -693,17 +712,17 @@ module.ToggleUnit = setmetatable({
 				end
 			end
 
-			module.ToggleUnit("Maintanktargettarget")
+			module.ToggleUnit("maintanktargettarget")
 		else
 			for i = 1, 4 do
 				if _G["oUF_LUI_maintankUnitButton"..i.."target"] then _G["oUF_LUI_maintankUnitButton"..i.."target"]:Disable() end
 			end
 
-			module.ToggleUnit("Maintanktargettarget", false)
+			module.ToggleUnit("maintanktargettarget", false)
 		end
 	end,
 
-	Maintanktargettarget = function(override)
+	maintanktargettarget = function(override)
 		local dbUnit = module.db.profile.maintanktargettarget
 		if override == nil then override = dbUnit.Enable end
 
@@ -728,19 +747,26 @@ module.ToggleUnit = setmetatable({
 		if override == nil then override = dbUnit.Enable end
 
 		if override then
+			local frameHeight = GetFrameHeight(dbUnit)
+			local footprintHeight = GetFootprintHeight(dbUnit)
+			local raidVerticalPadding = GetVerticalStackPadding(dbUnit)
 			if IsAddOnLoaded("Plexus") or IsAddOnLoaded("Grid2") or IsAddOnLoaded("VuhDo") or IsAddOnLoaded("Healbot") then
 				return
 			end
 			if oUF_LUI_raid then
+				oUF_LUI_raid:SetWidth(dbUnit.Width * 5 + dbUnit.GroupPadding * 4)
+				oUF_LUI_raid:SetHeight(footprintHeight * 5 + dbUnit.Padding * 4)
+
 				for i = 1, 5 do
+					local header = _G["oUF_LUI_raid_25_"..i]
 					if i ~= 1 then
-						_G["oUF_LUI_raid_25_"..i]:SetPoint("TOPLEFT", _G["oUF_LUI_raid_25_"..i-1], "TOPRIGHT", dbUnit.GroupPadding, 0)
-						_G["oUF_LUI_raid_25_"..i]:SetAttribute("yOffset", - dbUnit.Padding)
-						_G["oUF_LUI_raid_25_"..i]:SetAttribute("oUF-initialConfigFunction", [[
-							self:SetHeight(]]..dbUnit.Height..[[)
-							self:SetWidth(]]..dbUnit.Width..[[)
-						]])
+						header:SetPoint("TOPLEFT", _G["oUF_LUI_raid_25_"..i-1], "TOPRIGHT", dbUnit.GroupPadding, 0)
 					end
+					header:SetAttribute("yOffset", - raidVerticalPadding)
+					header:SetAttribute("oUF-initialConfigFunction", [[
+						self:SetHeight(]]..frameHeight..[[)
+						self:SetWidth(]]..dbUnit.Width..[[)
+					]])
 					for j = 1, 5 do
 						local frame = _G["oUF_LUI_raid_25_"..i.."UnitButton"..j]
 						if frame then
@@ -753,14 +779,15 @@ module.ToggleUnit = setmetatable({
 				local width40 = (5 * dbUnit.Width - 3 * dbUnit.GroupPadding) / 8
 
 				for i = 1, 8 do
+					local header = _G["oUF_LUI_raid_40_"..i]
 					if i ~= 1 then
-						_G["oUF_LUI_raid_40_"..i]:SetPoint("TOPLEFT", _G["oUF_LUI_raid_40_"..i-1], "TOPRIGHT", dbUnit.GroupPadding, 0)
-						_G["oUF_LUI_raid_40_"..i]:SetAttribute("yOffset", - dbUnit.Padding)
-						_G["oUF_LUI_raid_40_"..i]:SetAttribute("oUF-initialConfigFunction", [[
-							self:SetHeight(]]..dbUnit.Height..[[)
-							self:SetWidth(]]..width40..[[)
-						]])
+						header:SetPoint("TOPLEFT", _G["oUF_LUI_raid_40_"..i-1], "TOPRIGHT", dbUnit.GroupPadding, 0)
 					end
+					header:SetAttribute("yOffset", - raidVerticalPadding)
+					header:SetAttribute("oUF-initialConfigFunction", [[
+						self:SetHeight(]]..frameHeight..[[)
+						self:SetWidth(]]..width40..[[)
+					]])
 					for j = 1, 5 do
 						local frame = _G["oUF_LUI_raid_40_"..i.."UnitButton"..j]
 						if frame then
@@ -779,7 +806,7 @@ module.ToggleUnit = setmetatable({
 			else
 				local raidAnchor = CreateFrame("Frame", "oUF_LUI_raid", UIParent)
 				raidAnchor:SetWidth(dbUnit.Width * 5 + dbUnit.GroupPadding * 4)
-				raidAnchor:SetHeight(dbUnit.Height * 5 + dbUnit.Padding * 4)
+				raidAnchor:SetHeight(footprintHeight * 5 + dbUnit.Padding * 4)
 				raidAnchor:SetPoint(dbUnit.Point, UIParent, dbUnit.Point, dbUnit.X, dbUnit.Y)
 
 				local raid25 = CreateFrame("Frame", "oUF_LUI_raid_25", raidAnchor, "SecureHandlerStateTemplate")
@@ -794,9 +821,9 @@ module.ToggleUnit = setmetatable({
 						"showPlayer", true,
 						"showSolo", true,
 						"groupFilter", tostring(i),
-						"yOffset", - dbUnit.Padding,
+						"yOffset", - raidVerticalPadding,
 						"oUF-initialConfigFunction", [[
-							self:SetHeight(]]..dbUnit.Height..[[)
+							self:SetHeight(]]..frameHeight..[[)
 							self:SetWidth(]]..dbUnit.Width..[[)
 						]]
 					)
@@ -824,9 +851,9 @@ module.ToggleUnit = setmetatable({
 						"showPlayer", true,
 						"showSolo", true,
 						"groupFilter", tostring(i),
-						"yOffset", - dbUnit.Padding,
+						"yOffset", - raidVerticalPadding,
 						"oUF-initialConfigFunction", [[
-							self:SetHeight(]]..dbUnit.Height..[[)
+							self:SetHeight(]]..frameHeight..[[)
 							self:SetWidth(]]..width40..[[)
 						]]
 					)
@@ -871,15 +898,38 @@ module.ToggleUnit = setmetatable({
 	end,
 }, ToggleMT)
 
-module.ApplySettings = function(unit)
+local pendingUnitSettings = {}
+local pendingSettingsFrame = CreateFrame("Frame")
+
+pendingSettingsFrame:SetScript("OnEvent", function(self)
+	self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+
+	local queued = pendingUnitSettings
+	pendingUnitSettings = {}
+
+	for unit in pairs(queued) do
+		module.ApplySettings(unit)
+	end
+end)
+
+module.ApplySettings = function(unit, force)
+	-- Unitframes are protected. Option changes may update the database in
+	-- combat, but every frame mutation must wait until combat lockdown ends.
+	if InCombatLockdown() then
+		pendingUnitSettings[unit] = true
+		pendingSettingsFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+		return
+	end
+
 	local dbUnit = module.db.profile[unit]
-	if dbUnit.Enable == false then return end
+	if dbUnit.Enable == false and not force then return end
 
 	for _, framename in pairs(module.framelist[unit]) do
 		local frame = _G[framename]
-		--print(string.format("Updating: _ = %s, framename = %s, frame = %s", tostring(_), tostring(framename), tostring(frame)))
 
 		if frame then
+			local styleUnit = frame.LUIStyleUnit or frame.__unit
+			local runtimeUnit = frame.LUIPreviewUnit or frame.__unit
 			if framename:find("oUF_LUI_raid_40") then
 				frame:SetWidth((dbUnit.Width * 5 - dbUnit.GroupPadding * 3) / 8)
 			else
@@ -888,39 +938,39 @@ module.ApplySettings = function(unit)
 			frame:SetHeight(dbUnit.Height)
 
 			-- bars
-			module.funcs.Health(frame, frame.__unit, dbUnit)
-			module.funcs.Power(frame, frame.__unit, dbUnit)
-			module.funcs.FrameBackdrop(frame, frame.__unit, dbUnit)
+			module.funcs.Health(frame, styleUnit, dbUnit)
+			module.funcs.Power(frame, styleUnit, dbUnit)
+			module.funcs.FrameBackdrop(frame, styleUnit, dbUnit)
 
 			-- texts
 			if unit == "raid" then
-				module.funcs.RaidInfo(frame, frame.__unit, dbUnit)
+				module.funcs.RaidInfo(frame, styleUnit, dbUnit)
 			else
-				module.funcs.Info(frame, frame.__unit, dbUnit)
+				module.funcs.Info(frame, styleUnit, dbUnit)
 			end
 
-			module.funcs.HealthValue(frame, frame.__unit, dbUnit)
-			module.funcs.HealthPercent(frame, frame.__unit, dbUnit)
-			module.funcs.HealthMissing(frame, frame.__unit, dbUnit)
+			module.funcs.HealthValue(frame, styleUnit, dbUnit)
+			module.funcs.HealthPercent(frame, styleUnit, dbUnit)
+			module.funcs.HealthMissing(frame, styleUnit, dbUnit)
 
-			module.funcs.PowerValue(frame, frame.__unit, dbUnit)
-			module.funcs.PowerPercent(frame, frame.__unit, dbUnit)
-			module.funcs.PowerMissing(frame, frame.__unit, dbUnit)
+			module.funcs.PowerValue(frame, styleUnit, dbUnit)
+			module.funcs.PowerPercent(frame, styleUnit, dbUnit)
+			module.funcs.PowerMissing(frame, styleUnit, dbUnit)
 
 			-- icons
-			if dbUnit.Indicators then
-				for key, icons in pairs(iconlist) do
-					if dbUnit.Indicators[key] then
-						if dbUnit.Indicators[key].Enable then
-							module.funcs[icons[1]](frame, frame.__unit, dbUnit)
-							frame:EnableElement(icons[1])
-							if icons[2] then frame:EnableElement(icons[2]) end
-						else
-							if frame[icons[1]] then
-								for _, icon in pairs(icons) do
-									frame:DisableElement(icon)
-								end
-							end
+			for key, icons in pairs(iconlist) do
+				local indicatorDB = dbUnit[indicatorDBKeys[key]]
+				if indicatorDB then
+					if indicatorDB.Enable then
+						module.funcs[icons[1]](frame, styleUnit, dbUnit)
+						for _, icon in pairs(icons) do
+							frame:EnableElement(icon)
+							if frame[icon] then frame[icon]:Show() end
+						end
+					else
+						for _, icon in pairs(icons) do
+							frame:DisableElement(icon)
+							if frame[icon] then frame[icon]:Hide() end
 						end
 					end
 				end
@@ -931,7 +981,7 @@ module.ApplySettings = function(unit)
 
 				-- runes
 				if LUI.DEATHKNIGHT then
-					module.funcs.Runes(frame, frame.__unit, module.db.profile.player)
+					module.funcs.Runes(frame, styleUnit, module.db.profile.player)
 					if dbUnit.RunesBar.Enable then
 						frame:EnableElement("Runes")
 					else
@@ -941,8 +991,8 @@ module.ApplySettings = function(unit)
 				end
 
 				-- ClassPower
-				if LUI.PALADIN or LUI.WARLOCK or LUI.MONK or LUI.ROGUE then
-					module.funcs.ClassPower(frame, frame.__unit, module.db.profile.player)
+				if supportsClassPower then
+					module.funcs.ClassPower(frame, styleUnit, module.db.profile.player)
 					if dbUnit.ClassPowerBar.Enable then
 						frame:EnableElement("ClassPower")
 					else
@@ -951,9 +1001,21 @@ module.ApplySettings = function(unit)
 					end
 				end
 
+				-- Totems
+				if LUI.SHAMAN then
+					module.funcs.Totems(frame, styleUnit, module.db.profile.player)
+					if dbUnit.TotemsBar.Enable then
+						frame:EnableElement("Totems")
+						frame.Totems:Show()
+					else
+						frame:DisableElement("Totems")
+						frame.Totems:Hide()
+					end
+				end
+
 				-- Additional Power
 				if LUI.DRUID or LUI.PRIEST or LUI.SHAMAN then
-					module.funcs.AdditionalPower(frame, frame.__unit, module.db.profile.player)
+					module.funcs.AdditionalPower(frame, styleUnit, module.db.profile.player)
 					if dbUnit.AdditionalPowerBar.Enable then
 						frame:EnableElement("AdditionalPower")
 					else
@@ -965,7 +1027,7 @@ module.ApplySettings = function(unit)
 
 			-- portrait
 			if dbUnit.Portrait and dbUnit.Portrait.Enable then
-				module.funcs.Portrait(frame, frame.__unit, dbUnit)
+				module.funcs.Portrait(frame, runtimeUnit, dbUnit)
 				frame:EnableElement("Portrait")
 				frame.Portrait:Show()
 			else
@@ -978,7 +1040,7 @@ module.ApplySettings = function(unit)
 			-- alt power
 			if unit == "player" or unit == "pet" then
 				if module.db.profile.player.AlternativePowerBar.Enable then
-					module.funcs.AlternativePower(frame, frame.__unit, dbUnit)
+					module.funcs.AlternativePower(frame, styleUnit, dbUnit)
 					frame:EnableElement("AlternativePower")
 					frame.AlternativePower.SetPosition()
 				else
@@ -992,21 +1054,23 @@ module.ApplySettings = function(unit)
 			-- auras
 			if dbUnit.Aura then
 				if dbUnit.Aura.Buffs.Enable then
-					module.funcs.Buffs(frame, frame.__unit, dbUnit)
+					module.funcs.Buffs(frame, runtimeUnit, dbUnit)
 				else
 					if frame.Buffs then frame.Buffs:Hide() end
 				end
 
 				if dbUnit.Aura.Debuffs.Enable then
-					module.funcs.Debuffs(frame, frame.__unit, dbUnit)
+					module.funcs.Debuffs(frame, runtimeUnit, dbUnit)
 				else
 					if frame.Debuffs then frame.Debuffs:Hide() end
 				end
 
-				if dbUnit.Aura.Buffs.Enable or dbUnit.Aura.Debuffs.Enable then
-					frame:EnableElement("Auras")
-				else
-					frame:DisableElement("Auras")
+				-- Buffs/Debuffs are Blizzard AuraContainers in 12.1, not oUF elements.
+				if frame.Buffs and frame.Buffs.SetEnabled then
+					frame.Buffs:SetEnabled(dbUnit.Aura.Buffs.Enable == true)
+				end
+				if frame.Debuffs and frame.Debuffs.SetEnabled then
+					frame.Debuffs:SetEnabled(dbUnit.Aura.Debuffs.Enable == true)
 				end
 			end
 
@@ -1015,34 +1079,48 @@ module.ApplySettings = function(unit)
 			end
 
 			-- combat feedback text
-			if dbUnit.CombatFeedback then module.funcs.CombatFeedbackText(frame, frame.__unit, dbUnit) end
+			if dbUnit.CombatFeedback then module.funcs.CombatFeedbackText(frame, styleUnit, dbUnit) end
 
 			-- castbar
-			if dbUnit.Castbar and module:UnitSupportsCastbar(unit) then
-				if dbUnit.Castbar.General.Enable then
-					module.funcs.Castbar(frame, frame.__unit, dbUnit)
+			if dbUnit.Castbar then
+				if module:UnitSupportsCastbar(unit) and dbUnit.Castbar.General.Enable then
+					module.funcs.Castbar(frame, styleUnit, dbUnit)
 					frame:EnableElement("Castbar")
 				else
 					frame:DisableElement("Castbar")
+					if frame.Castbar then frame.Castbar:Hide() end
 				end
 			end
 
 			-- aggro glow
 			if dbUnit.Border.Aggro then
-				module.funcs.AggroGlow(frame, frame.__unit, dbUnit)
-				frame:EnableElement("Threat")
+				module.funcs.AggroGlow(frame, styleUnit, dbUnit)
+				frame:EnableElement("ThreatIndicator")
 			else
-				frame:DisableElement("Threat")
+				frame:DisableElement("ThreatIndicator")
 			end
 
 			-- heal prediction
-			if dbUnit.HealthPrediction then
-				if dbUnit.HealthPrediction.Enable then
-					module.funcs.HealthPrediction(frame, frame.__unit, dbUnit)
-					frame:EnableElement("HealthPrediction")
-				else
-					frame:DisableElement("HealthPrediction")
-				end
+			if dbUnit.HealthPredictionBar then
+				module.funcs.HealthPrediction(frame, styleUnit, dbUnit)
+			end
+			if dbUnit.TotalAbsorbBar then
+				module.funcs.TotalAbsorb(frame, styleUnit, dbUnit)
+			end
+			if dbUnit.HealthPredictionBar or dbUnit.TotalAbsorbBar then
+				frame:DisableElement("Health")
+				frame:EnableElement("Health")
+			end
+
+			-- Range fading can be switched on after the frame was created. The
+			-- original layout only registered the element during initial spawn.
+			local useRange = unit == "raid" or (unit == "party" and dbUnit.RangeFade and dbUnit.Fader and not dbUnit.Fader.Enable)
+			if useRange then
+				frame.Range = frame.Range or {insideAlpha = 1, outsideAlpha = 0.5}
+				frame:EnableElement("Range")
+			else
+				frame:DisableElement("Range")
+				frame:SetAlpha(1)
 			end
 
 			if unit == "targettarget" or unit == "targettargettarget" or unit == "focustarget" or unit == "focus" then
@@ -1063,7 +1141,7 @@ module.ApplySettings = function(unit)
 				if not frame.V2Tex then module.funcs.V2Textures(frame, _G["oUF_LUI_partyUnitButton"..frame:GetName():match("%d")]) end
 				frame.V2Tex:Reposition()
 				if module.db.profile.Settings.ShowV2PartyTextures then frame.V2Tex:Show() else frame.V2Tex:Hide() end
-			elseif unit == "Arenatarget" then
+			elseif unit == "arenatarget" then
 				if not frame.V2Tex then module.funcs.V2Textures(frame, _G["oUF_LUI_arena"..frame:GetName():match("%d")]) end
 				frame.V2Tex:Reposition()
 				if module.db.profile.Settings.ShowV2ArenaTextures then frame.V2Tex:Show() else frame.V2Tex:Hide() end

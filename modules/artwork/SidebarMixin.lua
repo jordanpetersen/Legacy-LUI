@@ -45,10 +45,14 @@ function SidebarMixin:Open()
 		-- Additionally, if called while already open, force it without playing the animation.
 		if self.db.OpenInstant or InCombatLockdown() or self:IsOpen() then
 			self.Drawer:SetAlpha(1)
-			self.BtnAnchorOpen:Show()
-			self.BtnAnchor:Hide()
-			local anchoredFrame = _G[self.db.Anchor]
-			if anchoredFrame then anchoredFrame:Show() end
+			-- Protected Bartender/action-bar frames are toggled by the secure
+			-- PostClick wrapper while in combat.
+			if not InCombatLockdown() then
+				self.BtnAnchorOpen:Show()
+				self.BtnAnchor:Hide()
+				local anchoredFrame = _G[self.db.Anchor]
+				if anchoredFrame then anchoredFrame:Show() end
+			end
 		else
 			self.OpenAnim:Play()
 		end
@@ -60,10 +64,14 @@ function SidebarMixin:Close()
 	if not self.CloseAnim:IsPlaying() then
 		if self.db.OpenInstant or InCombatLockdown() or not self:IsOpen() then
 			self.Drawer:SetAlpha(0)
-			self.BtnAnchorOpen:Hide()
-			self.BtnAnchor:Show()
-			local anchoredFrame = _G[self.db.Anchor]
-			if anchoredFrame then anchoredFrame:Hide() end
+			-- Protected Bartender/action-bar frames are toggled by the secure
+			-- PostClick wrapper while in combat.
+			if not InCombatLockdown() then
+				self.BtnAnchorOpen:Hide()
+				self.BtnAnchor:Show()
+				local anchoredFrame = _G[self.db.Anchor]
+				if anchoredFrame then anchoredFrame:Hide() end
+			end
 		else
 			self.CloseAnim:Play()
 		end
@@ -127,7 +135,7 @@ function SidebarMixin:Refresh()
 		self:Hide()
 	end
 
-	if _G[self.db.Anchor] then
+	if not InCombatLockdown() and _G[self.db.Anchor] then
 		self.BtnAnchor:SetFrameRef("anchor", _G[self.db.Anchor])
 		self.BtnAnchorOpen:SetFrameRef("anchor", _G[self.db.Anchor])
 	end
@@ -198,6 +206,8 @@ function SidebarMixin:ApplyToBartender()
 	local barX, barY, point, scale = self:GetRecommendedBarPosition()
 	if not barX then return end
 
+	
+	-- Update Bartender settings.
 	barOpt.enabled = self.db.Enable
 	barOpt.buttons = 12
 	barOpt.rows = 6
@@ -211,6 +221,10 @@ function SidebarMixin:ApplyToBartender()
 	barOpt.position.scale = scale
 	Bartender4:UpdateModuleConfigs()
 end
+
+-- Bartender rebuilds secure action-button state from UpdateModuleConfigs.
+-- Never invoke it during combat; apply the latest sidebar values on leaving.
+SidebarMixin.BT4Adjust = LUI.OutOfCombatWrapper(ApplyBT4Adjust)
 
 module.SidebarMixin = SidebarMixin
 

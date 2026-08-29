@@ -88,7 +88,6 @@ local totalBNFriends = 0
 local onlineBNFriends = 0
 local infotip
 local legendTip
-local onBlock
 
 --Add new Static Dialog, called once, no need to have local copies.
 StaticPopupDialogs["SET_BN_BROADCAST"] = {
@@ -194,7 +193,7 @@ function element:CreateNegativeLine(name)
 end
 
 function element:UpdateInfotip()
-	if infotip and onBlock then
+	if infotip and infotip:IsShown() then
 		infotip:UpdateTooltip()
 	end
 end
@@ -266,11 +265,13 @@ end
 
 function element:GetBNFriendStatusString(isAFK, isDND)
 	local statusString = ""
+
 	if isDND then
-		statusString = module:ColorText(CHAT_FLAG_DND, "Status")
+		statusString = module:ColorText("<DND> ", "Status")
 	elseif isAFK then
-		statusString = module:ColorText(CHAT_FLAG_AFK, "Status")
+		statusString = module:ColorText("<AFK> ", "Status")
 	end
+
 	return statusString
 end
 
@@ -704,14 +705,11 @@ function element.OnEnter(frame_)
 	legendTip:ClearAllPoints()
 	legendTip:SetPoint("RIGHT", infotip, "LEFT", -8, 0)
 	legendTip:Show()
-	
-	onBlock = true
 end
 
 function element.OnLeave(frame_)
-	if not infotip:IsMouseOver() then
+	if infotip and not infotip:IsMouseOver() then
 		infotip:Hide()
-		onBlock = false
 	end
 	
 		if legendTip then

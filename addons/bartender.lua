@@ -9,7 +9,7 @@ local addonname, LUI = ...
 
 LUI.Versions.bartender = 3300
 
-function LUI:InstallBartender()
+local function InstallBartender(self)
 	if not C_AddOns.IsAddOnLoaded("Bartender4") then return end
 
 	local CharName = LUI.playerName
@@ -21,13 +21,13 @@ function LUI:InstallBartender()
 		[CharName] = {
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.203, 0.203, 0.203, 1},
-					["Pushed"] = {1, 1, 1, 0.319},
-					["Highlight"] = {1, 1, 1, 1},
-					["Gloss"] = {0.980, 0.980, 0.980, 1},
-					["Backdrop"] = {0.980, 1, 0.968, 1},
-					["Border"] = {0.082, 1, 0.043, 1},
-					["Checked"] = {0.988, 1, 0.984, 1},
+					["Normal"] = { 0.203, 0.203, 0.203, 1 },
+					["Pushed"] = { 1, 1, 1, 0.319 },
+					["Highlight"] = { 1, 1, 1, 1 },
+					["Gloss"] = { 0.980, 0.980, 0.980, 1 },
+					["Backdrop"] = { 0.980, 1, 0.968, 1 },
+					["Border"] = { 0.082, 1, 0.043, 1 },
+					["Checked"] = { 0.988, 1, 0.984, 1 },
 				},
 				["ID"] = "Caith",
 				["Backdrop"] = false,
@@ -43,7 +43,7 @@ function LUI:InstallBartender()
 		},
 	}
 
-	for k,v in pairs(BagBarDefaults) do
+	for k, v in pairs(BagBarDefaults) do
 		Bartender4DB.namespaces.BagBar.profiles[k] = v
 	end
 
@@ -55,15 +55,15 @@ function LUI:InstallBartender()
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -90,15 +90,15 @@ function LUI:InstallBartender()
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -123,14 +123,14 @@ function LUI:InstallBartender()
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Disabled"] = {0.988, 1, 0.949, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {0.980, 0.980, 0.980, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 0.980, 0.980, 0.980, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -157,15 +157,15 @@ function LUI:InstallBartender()
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -192,15 +192,15 @@ function LUI:InstallBartender()
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -228,15 +228,15 @@ function LUI:InstallBartender()
 					["rows"] = 1,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {1, 1, 1, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -263,14 +263,14 @@ function LUI:InstallBartender()
 					["rows"] = 6,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Disabled"] = {0.988, 1, 0.949, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {0.980, 0.980, 0.980, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 0.980, 0.980, 0.980, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -297,14 +297,14 @@ function LUI:InstallBartender()
 					["rows"] = 6,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Disabled"] = {0.988, 1, 0.949, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Gloss"] = {0.980, 0.980, 0.980, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Gloss"] = { 0.980, 0.980, 0.980, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -331,15 +331,15 @@ function LUI:InstallBartender()
 					["rows"] = 6,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Gloss"] = {1, 1, 1, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
-							["Flash"] = {1, 0, 0, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Disabled"] = {0.988, 1, 0.949, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Gloss"] = { 1, 1, 1, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
+							["Flash"] = { 1, 0, 0, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Disabled"] = { 0.988, 1, 0.949, 1 },
 						},
 						["ID"] = "Darion",
 						["Gloss"] = 0.3,
@@ -366,12 +366,12 @@ function LUI:InstallBartender()
 					["rows"] = 6,
 					["skin"] = {
 						["Colors"] = {
-							["Normal"] = {0.133, 0.133, 0.133, 0.950},
-							["Pushed"] = {0.321, 0.321, 0.321, 1},
-							["Checked"] = {0.011, 0.011, 0.011, 0},
-							["Highlight"] = {0.403, 0.403, 0.403, 1},
-							["Backdrop"] = {0.109, 0.109, 0.109, 1},
-							["Border"] = {0.407, 0.403, 0.411, 1},
+							["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+							["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+							["Checked"] = { 0.011, 0.011, 0.011, 0 },
+							["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+							["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+							["Border"] = { 0.407, 0.403, 0.411, 1 },
 						},
 						["Gloss"] = 0.3,
 						["ID"] = "Darion",
@@ -398,23 +398,32 @@ function LUI:InstallBartender()
 	}
 
 	do
-		-- Enable BT4 bars that Artwork sidebars are anchored to (Artwork.SideBars, not the retired Bars module).
-		local art = LUI:GetModule("Artwork", true)
-		local sideBars = art and art.db and art.db.profile and art.db.profile.SideBars
-		if sideBars then
-			for _, side in pairs(sideBars) do
-				if side.Enable and side.Anchor and strsub(side.Anchor, 1, 3) == "BT4" then
-					local _, num = strsplit("r", side.Anchor)
-					num = tonumber(num)
-					if num and ActionBarsDefaults[CharName].actionbars[num] then
-						ActionBarsDefaults[CharName].actionbars[num].enabled = true
-					end
-				end
-			end
+		--ActionBarsDefaults[CharName].actionbars[10]
+		local bar_mod = LUI:GetModule("Bars", true)
+		local bardb = bar_mod and bar_mod.db.profile
+		if bardb and bardb.SidebarRight1.Enable and strsub(bardb.SidebarRight1.Anchor, 1, 3) == "BT4" then
+			local _, num = strsplit("r", bardb.SidebarRight1.Anchor)
+			local barOpt = ActionBarsDefaults[CharName].actionbars[tonumber(num)]
+			barOpt.enabled = true
+		end
+		if bardb and bardb.SidebarRight2.Enable and strsub(bardb.SidebarRight2.Anchor, 1, 3) == "BT4" then
+			local _, num = strsplit("r", bardb.SidebarRight2.Anchor)
+			local barOpt = ActionBarsDefaults[CharName].actionbars[tonumber(num)]
+			barOpt.enabled = true
+		end
+		if bardb and bardb.SidebarLeft1.Enable and strsub(bardb.SidebarLeft1.Anchor, 1, 3) == "BT4" then
+			local _, num = strsplit("r", bardb.SidebarLeft1.Anchor)
+			local barOpt = ActionBarsDefaults[CharName].actionbars[tonumber(num)]
+			barOpt.enabled = true
+		end
+		if bardb and bardb.SidebarLeft2.Enable and strsub(bardb.SidebarLeft2.Anchor, 1, 3) == "BT4" then
+			local _, num = strsplit("r", bardb.SidebarLeft2.Anchor)
+			local barOpt = ActionBarsDefaults[CharName].actionbars[tonumber(num)]
+			barOpt.enabled = true
 		end
 	end
 
-	for k,v in pairs(ActionBarsDefaults) do
+	for k, v in pairs(ActionBarsDefaults) do
 		Bartender4DB.namespaces.ActionBars.profiles[k] = v
 	end
 
@@ -424,14 +433,14 @@ function LUI:InstallBartender()
 			["fadeoutalpha"] = 1,
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.133, 0.133, 0.133, 0.950},
-					["Pushed"] = {0.321, 0.321, 0.321, 1},
-					["Highlight"] = {0.403, 0.403, 0.403, 1},
-					["Checked"] = {0.011, 0.011, 0.011, 0},
-					["Gloss"] = {1, 1, 1, 1},
-					["Border"] = {0.407, 0.403, 0.411, 1},
-					["Backdrop"] = {0.109, 0.109, 0.109, 1},
-					["Flash"] = {1, 0, 0, 1},
+					["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+					["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+					["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+					["Checked"] = { 0.011, 0.011, 0.011, 0 },
+					["Gloss"] = { 1, 1, 1, 1 },
+					["Border"] = { 0.407, 0.403, 0.411, 1 },
+					["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+					["Flash"] = { 1, 0, 0, 1 },
 				},
 				["Gloss"] = 0.3,
 				["ID"] = "Darion",
@@ -452,7 +461,7 @@ function LUI:InstallBartender()
 		},
 	}
 
-	for k,v in pairs(VehicleDefaults) do
+	for k, v in pairs(VehicleDefaults) do
 		Bartender4DB.namespaces.Vehicle.profiles[k] = v
 	end
 
@@ -466,15 +475,15 @@ function LUI:InstallBartender()
 			},
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.133, 0.133, 0.133, 0.950},
-					["Pushed"] = {0.321, 0.321, 0.321, 1},
-					["Highlight"] = {0.403, 0.403, 0.403, 1},
-					["Gloss"] = {1, 1, 1, 1},
-					["Backdrop"] = {0.109, 0.109, 0.109, 1},
-					["Flash"] = {1, 0, 0, 1},
-					["Border"] = {0.407, 0.403, 0.411, 1},
-					["Checked"] = {0.011, 0.011, 0.011, 0},
-					["Disabled"] = {0.988, 1, 0.949, 1},
+					["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+					["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+					["Highlight"] = { 0.403, 0.403, 0.403, 1 },
+					["Gloss"] = { 1, 1, 1, 1 },
+					["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+					["Flash"] = { 1, 0, 0, 1 },
+					["Border"] = { 0.407, 0.403, 0.411, 1 },
+					["Checked"] = { 0.011, 0.011, 0.011, 0 },
+					["Disabled"] = { 0.988, 1, 0.949, 1 },
 				},
 				["Gloss"] = 0.3,
 				["ID"] = "Darion",
@@ -492,7 +501,7 @@ function LUI:InstallBartender()
 		},
 	}
 
-	for k,v in pairs(StanceBarDefaults) do
+	for k, v in pairs(StanceBarDefaults) do
 		Bartender4DB.namespaces.StanceBar.profiles[k] = v
 	end
 
@@ -512,20 +521,20 @@ function LUI:InstallBartender()
 			},
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.133, 0.133, 0.133, 0.950},
-					["Pushed"] = {0.321, 0.321, 0.321, 1},
-					["Highlight"] = {0.450, 0.450, 0.450, 1},
-					["Gloss"] = {1, 1, 1, 1},
-					["Backdrop"] = {0.109, 0.109, 0.109, 1},
-					["Flash"] = {1, 0, 0, 1},
-					["Border"] = {0.407, 0.403, 0.411, 1},
+					["Normal"] = { 0.133, 0.133, 0.133, 0.950 },
+					["Pushed"] = { 0.321, 0.321, 0.321, 1 },
+					["Highlight"] = { 0.450, 0.450, 0.450, 1 },
+					["Gloss"] = { 1, 1, 1, 1 },
+					["Backdrop"] = { 0.109, 0.109, 0.109, 1 },
+					["Flash"] = { 1, 0, 0, 1 },
+					["Border"] = { 0.407, 0.403, 0.411, 1 },
 					["Checked"] = {
 						0.6, -- [1]
 						0.6, -- [2]
 						0.6, -- [3]
 						1, -- [4]
 					},
-					["Disabled"] = {0.988, 1, 0.949, 1},
+					["Disabled"] = { 0.988, 1, 0.949, 1 },
 				},
 				["ID"] = "Darion",
 				["Gloss"] = 0.3,
@@ -533,7 +542,7 @@ function LUI:InstallBartender()
 		},
 	}
 
-	for k,v in pairs(PetBarDefaults) do
+	for k, v in pairs(PetBarDefaults) do
 		Bartender4DB.namespaces.PetBar.profiles[k] = v
 	end
 
@@ -544,8 +553,8 @@ function LUI:InstallBartender()
 			["show"] = "alwayshide",
 			["skin"] = {
 				["Colors"] = {
-					["Normal"] = {0.133, 0.133, 0.133, 1},
-					["Border"] = {0.392, 0.388, 0.396, 1},
+					["Normal"] = { 0.133, 0.133, 0.133, 1 },
+					["Border"] = { 0.392, 0.388, 0.396, 1 },
 				},
 				["ID"] = "Caith",
 				["Backdrop"] = false,
@@ -559,7 +568,7 @@ function LUI:InstallBartender()
 		},
 	}
 
-	for k,v in pairs(MicroMenuDefaults) do
+	for k, v in pairs(MicroMenuDefaults) do
 		Bartender4DB.namespaces.MicroMenu.profiles[k] = v
 	end
 
@@ -574,17 +583,22 @@ function LUI:InstallBartender()
 		},
 	}
 
-	for k,v in pairs(BTProfilesDefaults) do
+	for k, v in pairs(BTProfilesDefaults) do
 		Bartender4DB.profiles[k] = v
 	end
 
 	if Bartender4DB.profileKeys[LUI.profileName] == nil then
-		tinsert(Bartender4DB.profileKeys,LUI.profileName)
+		tinsert(Bartender4DB.profileKeys, LUI.profileName)
 		Bartender4DB.profileKeys[LUI.profileName] = CharName
 	elseif Bartender4DB.profileKeys[LUI.profileName] ~= CharName then
 		Bartender4DB.profileKeys[LUI.profileName] = CharName
 	end
 	_G.Bartender4:UpdateModuleConfigs()
 
-	if LUI.db.global.luiconfig[LUI.profileName].Versions then LUI.db.global.luiconfig[LUI.profileName].Versions.bartender = LUI.Versions.bartender end
+	if LUI.db.global.luiconfig[LUI.profileName].Versions then LUI.db.global.luiconfig[LUI.profileName].Versions.bartender =
+		LUI.Versions.bartender end
 end
+
+-- Updating Bartender's module configuration rebuilds secure action buttons.
+-- Defer the complete operation when the installer is invoked in combat.
+LUI.InstallBartender = LUI.OutOfCombatWrapper(InstallBartender)

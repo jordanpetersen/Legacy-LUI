@@ -40,10 +40,12 @@ local _, ns = ...
 local oUF = ns.oUF
 local Private = oUF.Private
 
+local STATE = {}
+
 local unitIsUnit = Private.unitIsUnit
 
 local function Update(self, event, unit)
-	if(not unit or not unitIsUnit(self.unit, unit)) then return end
+	if (not unit or not unitIsUnit(self.__unit, unit)) then return end
 
 	local element = self.Portrait
 
@@ -53,18 +55,23 @@ local function Update(self, event, unit)
 	* self - the Portrait element
 	* unit - the unit for which the update has been triggered (string)
 	--]]
-	if(element.PreUpdate) then element:PreUpdate(unit) end
+	if (element.PreUpdate) then element:PreUpdate(unit) end
 
 	local guid = UnitGUID(unit)
 	local isAvailable = UnitIsConnected(unit) and UnitIsVisible(unit)
 
-	local hasStateChanged = event ~= 'OnUpdate'
-		or (not issecretvalue(guid) and not issecretvalue(element.guid) and element.guid ~= guid)
-		or element.state ~= isAvailable
+	local hasStateChanged
+	if (event ~= 'OnUpdate') then
+		hasStateChanged = true
+	elseif (STATE[element].available ~= isAvailable) then
+		hasStateChanged = true
+	elseif (not issecretvalue(guid) and not issecretvalue(STATE[element].guid)) then
+		hasStateChanged = STATE[element].guid ~= guid
+	end
 
-	if(hasStateChanged) then
-		if(element:IsObjectType('PlayerModel')) then
-			if(not isAvailable) then
+	if (hasStateChanged) then
+		if (element:IsObjectType('PlayerModel')) then
+			if (not isAvailable) then
 				element:SetCamDistanceScale(0.25)
 				element:SetPortraitZoom(0)
 				element:SetPosition(0, 0, 0.25)
@@ -79,19 +86,19 @@ local function Update(self, event, unit)
 			end
 		else
 			local class, _
-			if(element.showClass) then
+			if (element.showClass) then
 				_, class = UnitClass(unit)
 			end
 
-			if(class) then
+			if (class ~= nil) then
 				element:SetAtlas('classicon-' .. class)
 			else
 				SetPortraitTexture(element, unit)
 			end
 		end
 
-		element.guid = guid
-		element.state = isAvailable
+		STATE[element].guid = guid
+		STATE[element].available = isAvailable
 	end
 
 	--[[ Callback: Portrait:PostUpdate(unit)
@@ -101,7 +108,7 @@ local function Update(self, event, unit)
 	* unit            - the unit for which the update has been triggered (string)
 	* hasStateChanged - indicates whether the state has changed since the last update (boolean)
 	--]]
-	if(element.PostUpdate) then
+	if (element.PostUpdate) then
 		return element:PostUpdate(unit, hasStateChanged)
 	end
 end
@@ -114,18 +121,20 @@ local function Path(self, ...)
 	* event - the event triggering the update (string)
 	* unit  - the unit accompanying the event (string)
 	--]]
-	return (self.Portrait.Override or Update) (self, ...)
+	return (self.Portrait.Override or Update)(self, ...)
 end
 
 local function ForceUpdate(element)
-	return Path(element.__owner, 'ForceUpdate', element.__owner.unit)
+	return Path(element.__owner, 'ForceUpdate', element.__owner.__unit)
 end
 
 local function Enable(self, unit)
 	local element = self.Portrait
-	if(element) then
+	if (element) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
+
+		STATE[element] = {}
 
 		self:RegisterEvent('UNIT_MODEL_CHANGED', Path)
 		self:RegisterEvent('UNIT_PORTRAIT_UPDATE', Path)
@@ -135,7 +144,7 @@ local function Enable(self, unit)
 		-- The quest log uses PARTY_MEMBER_{ENABLE,DISABLE} to handle updating of
 		-- party members overlapping quests. This will probably be enough to handle
 		-- model updating.
-		if(unit == 'party' or unit == 'target') then
+		if (unit == 'party' or unit == 'target') then
 			self:RegisterEvent('PARTY_MEMBER_ENABLE', Path)
 			self:RegisterEvent('PARTY_MEMBER_DISABLE', Path)
 		end
@@ -148,7 +157,7 @@ end
 
 local function Disable(self)
 	local element = self.Portrait
-	if(element) then
+	if (element) then
 		element:Hide()
 
 		self:UnregisterEvent('UNIT_MODEL_CHANGED', Path)

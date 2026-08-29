@@ -44,8 +44,9 @@ OnEnter and OnLeave script handlers will be set to display a Tooltip if the `Tot
 local _, ns = ...
 local oUF = ns.oUF
 
+-- sourced from Blizzard_FrameXMLBase/Constants.lua
 local TOTEM_PRIORITIES = _G.STANDARD_TOTEM_PRIORITIES
-if(UnitClassBase('player') == 'SHAMAN') then
+if (UnitClassBase('player') == 'SHAMAN') then
 	TOTEM_PRIORITIES = _G.SHAMAN_TOTEM_PRIORITIES
 end
 
@@ -54,21 +55,21 @@ local function UpdateTooltip(self)
 end
 
 local function OnEnter(self)
-	if(GameTooltip:IsForbidden() or not self:IsVisible()) then return end
+	if (GameTooltip:IsForbidden() or not self:IsVisible()) then return end
 
 	GameTooltip:SetOwner(self, 'ANCHOR_BOTTOMRIGHT')
 	self:UpdateTooltip()
 end
 
 local function OnLeave()
-	if(GameTooltip:IsForbidden()) then return end
+	if (GameTooltip:IsForbidden()) then return end
 
 	GameTooltip:Hide()
 end
 
 local function UpdateTotem(self, event, slot)
 	local element = self.Totems
-	if(slot > #element) then return end
+	if (slot > #element) then return end
 
 	--[[ Callback: Totems:PreUpdate(slot)
 	Called before the element has been updated.
@@ -76,36 +77,34 @@ local function UpdateTotem(self, event, slot)
 	* self - the Totems element
 	* slot - the slot of the totem to be updated (number)
 	--]]
-	if(element.PreUpdate) then element:PreUpdate(slot) end
+	if (element.PreUpdate) then element:PreUpdate(slot) end
 
 	local totem = element[TOTEM_PRIORITIES[slot]]
-	local haveTotem, name, start, duration, icon = GetTotemInfo(slot)
-	local durationObj = GetTotemDuration(slot)
+	local haveTotem, name, _, _, icon = GetTotemInfo(slot)
+	local duration = GetTotemDuration(slot)
 
 	totem:SetAlphaFromBoolean(haveTotem, 1, 0)
 
-	if(totem.Icon) then
+	if (totem.Icon) then
 		totem.Icon:SetTexture(icon)
 	end
 
-	if(totem.Cooldown and durationObj ~= nil) then
-		totem.Cooldown:SetCooldownFromDurationObject(durationObj)
+	if (totem.Cooldown and duration ~= nil) then
+		totem.Cooldown:SetCooldownFromDurationObject(duration)
 	end
 
-	--[[ Callback: Totems:PostUpdate(slot, haveTotem, name, start, duration, icon)
+	--[[ Callback: Totems:PostUpdate(slot, haveTotem, name, icon, duration)
 	Called after the element has been updated.
 
-	* self        - the Totems element
-	* slot        - the slot of the updated totem (number)
-	* haveTotem   - indicates if a totem is present in the given slot (boolean)
-	* name        - the name of the totem (string)
-	* start       - (deprecated) the value of `GetTime()` when the totem was created (number)
-	* duration    - (deprecated) the total duration for which the totem should last (number)
-	* icon        - the totem's icon (Texture)
-	* durationObj - totem duration ([DurationObject](https://warcraft.wiki.gg/wiki/ScriptObject_DurationObject))
+	* self      - the Totems element
+	* slot      - the slot of the updated totem (number)
+	* haveTotem - indicates if a totem is present in the given slot (boolean)
+	* name      - the name of the totem (string)
+	* icon      - the totem's icon (Texture)
+	* duration  - totem duration ([DurationObject](https://warcraft.wiki.gg/wiki/ScriptObject_DurationObject))
 	--]]
-	if(element.PostUpdate) then
-		return element:PostUpdate(slot, haveTotem, name, start, duration, icon, durationObj)
+	if (element.PostUpdate) then
+		return element:PostUpdate(slot, haveTotem, name, icon, duration)
 	end
 end
 
@@ -117,7 +116,7 @@ local function Path(self, ...)
 	* event - the event triggering the update (string)
 	* ...   - the arguments accompanying the event
 	--]]
-	return (self.Totems.Override or UpdateTotem) (self, ...)
+	return (self.Totems.Override or UpdateTotem)(self, ...)
 end
 
 local function Update(self, event)
@@ -132,7 +131,7 @@ end
 
 local function Enable(self)
 	local element = self.Totems
-	if(element) then
+	if (element) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 
@@ -140,7 +139,7 @@ local function Enable(self)
 			local totem = element[TOTEM_PRIORITIES[i]]
 			totem:SetID(i)
 
-			if(totem:IsMouseEnabled()) then
+			if (totem:IsMouseEnabled()) then
 				totem:SetScript('OnEnter', OnEnter)
 				totem:SetScript('OnLeave', OnLeave)
 
@@ -149,7 +148,7 @@ local function Enable(self)
 
 				* self - the widget at the given slot index
 				--]]
-				if(not totem.UpdateTooltip) then
+				if (not totem.UpdateTooltip) then
 					totem.UpdateTooltip = UpdateTooltip
 				end
 			end
@@ -168,7 +167,7 @@ end
 
 local function Disable(self)
 	local element = self.Totems
-	if(element) then
+	if (element) then
 		for i = 1, #element do
 			element[i]:Hide()
 		end

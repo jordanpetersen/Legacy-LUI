@@ -18,42 +18,29 @@ local TooltipDataProcessor = _G.TooltipDataProcessor
 local GameTooltipStatusBar = _G.GameTooltipStatusBar
 local BreakUpLargeNumbers = _G.BreakUpLargeNumbers
 local GetItemQualityColor = C_Item.GetItemQualityColor
-local UnitClassification = _G.UnitClassification
 local UnitTokenFromGUID = _G.UnitTokenFromGUID
 local InCombatLockdown = _G.InCombatLockdown
-local UnitCreatureType = _G.UnitCreatureType
 local UnitHasVehicleUI = _G.UnitHasVehicleUI
 local IsShiftKeyDown = _G.IsShiftKeyDown
 local UnitHealthMax = _G.UnitHealthMax
-local GetGuildInfo = _G.GetGuildInfo
 local UnitIsPlayer = _G.UnitIsPlayer
+local UnitIsInMyGuild = _G.UnitIsInMyGuild
 local UnitReaction = _G.UnitReaction
-local TooltipUtil = _G.TooltipUtil
 local GetItemInfo = C_Item.GetItemInfo
 local UnitIsGhost = _G.UnitIsGhost
 local UnitPVPName = _G.UnitPVPName
 local UnitExists = _G.UnitExists
 local UnitHealth = _G.UnitHealth
 local UnitIsDead = _G.UnitIsDead
-local IsInGuild = _G.IsInGuild
 local UnitClass = _G.UnitClass
 local UnitIsAFK = _G.UnitIsAFK
 local UnitIsDND = _G.UnitIsDND
-local UnitLevel = _G.UnitLevel
 local UnitName = _G.UnitName
-local UnitRace = _G.UnitRace
-local UnitSex = _G.UnitSex
-local pairs = pairs
 
 -- Constants
-local TicketStatusFrame = _G.TicketStatusFrame
 local CHAT_FLAG_DND = _G.CHAT_FLAG_DND
 local CHAT_FLAG_AFK = _G.CHAT_FLAG_AFK
-local PVP_ENABLED = _G.PVP_ENABLED
-local GUILD = _G.GUILD
 local LEVEL = _G.LEVEL
-local DEAD = _G.DEAD
-local BOSS = _G.BOSS
 
 local TOOLTIPS_LIST = {
 	"GameTooltip",
@@ -92,17 +79,6 @@ local TOOLTIPS_LIST = {
 	"AceConfigDialogTooltip",
 }
 
--- Need Localization
--- was local classification
-local MOB_CLASSIFICATION = {
-	worldboss = _G.BOSS,
-	rareelite = L["Tooltip_Rare"].."+",
-	elite = "+",
-	rare = L["Tooltip_Rare"],
-	minus = "-",  -- Does not give experience or reputation.
-	normal = "",
-}
-
 -- local variables
 local oldDefault = {}
 local initialScale = {}
@@ -117,20 +93,14 @@ module.defaults = {
 		HideCombatSkills = false,
 		HideCombatUnit = false,
 		HideUF = false,
-		HidePVP = true,
-		ShowSex = false,
 		Cursor = false,
 		Point = "RIGHT",
 		Scale = 1,
 		X = -150,
 		Y = 0,
-		HealthFontSize = 12,
 		HealthBar = "LUI_Minimalist",
 		BgTexture = "Blizzard Dialog Background Dark",
-		BorderTexture = "Stripped_medium",
-		BorderSize = 14,
 		Colors = {
-			Background = { r = 0.19, g = 0.19, b = 0.19, a = 1, t = "Individual", },
 			Border =     { r = 0.3,  g = 0.3,  b = 0.3,  a = 1, t = "Individual", },
 			Guild =      { r = 0,    g = 1,    b = 0.1,                           },
 			MyGuild =    { r = 0,    g = 0.55, b = 1,                             },
@@ -150,7 +120,6 @@ function module:RevertTooltipBackdrop()
 		local tooltipName = TOOLTIPS_LIST[i]
 		local tooltip = _G[tooltipName]
 		if tooltip then
-			tooltip:SetBackdrop(nil)
 			if tooltip.NineSlice then tooltip.NineSlice:SetAlpha(1) end
 			tooltip:SetScale(initialScale[tooltipName] or 1)
 		end
@@ -159,7 +128,6 @@ function module:RevertTooltipBackdrop()
 	-- This tooltip has no name, need to fetch and manually invoke
 	-- It is the tooltip that appears when hovering the campaign at the top of the questlog
 	local campaignFrame = _G.QuestMapLog_GetCampaignTooltip()
-	campaignFrame:SetBackdrop(nil)
 	campaignFrame.NineSlice:SetAlpha(1)
 	campaignFrame:SetScale(1)
 end
@@ -182,66 +150,105 @@ end
 
 -- Get a unit token out of a tooltip frame for use in many Unit functions.
 
---- Get a unit token out of a tooltip frame for use in many Unit functions. Returns "mouseover" if the unit is secret.
+local function GetTooltipOwnerUnit(tooltip)
+	local owner = tooltip and tooltip.GetOwner and tooltip:GetOwner()
+
+	while owner do
+		local unit
+		if owner.GetAttribute then
+			unit = owner:GetAttribute("unit")
+		end
+		if type(unit) == "string" and not issecretvalue(unit) then
+			return unit
+		end
+
+		unit = owner.__unit
+		if type(unit) == "string" and not issecretvalue(unit) then
+			return unit
+		end
+
+		owner = owner.GetParent and owner:GetParent()
+	end
+end
+
+--- Get a unit token out of a tooltip frame for use in many Unit functions.
 ---@param data TooltipData
+---@param tooltip GameTooltip?
 ---@return string?
-function module:GetTooltipUnit(data)
+function module:GetTooltipUnit(data, tooltip)
+	local ownerUnit = GetTooltipOwnerUnit(tooltip)
+	if ownerUnit then return ownerUnit end
+
 	if not data then return end
-	local unit = data.guid and UnitTokenFromGUID(data.guid)
-	if unit and not issecretvalue(unit) then
-		return unit
-	elseif UnitExists("mouseover") then
+	local guid = data.guid
+	if not issecretvalue(guid) and guid then
+		local unit = UnitTokenFromGUID(guid)
+		if unit and not issecretvalue(unit) then
+			return unit
+		end
+	end
+	if UnitExists("mouseover") then
 		return "mouseover"
 	end
 end
 
 function module:UpdateTooltipBackdrop(frame)
 	if not frame then return end
-	
-	module.tooltipBackdrop = {
-		bgFile = Media:Fetch("background", db.BgTexture),
-		edgeFile = Media:Fetch("border", db.BorderTexture),
-		edgeSize = db.BorderSize, tile = false,
-		insets = {left = 0, right = 0, top = 0, bottom = 0, }
-	}
+	if frame.IsForbidden and frame:IsForbidden() then return end
 
-	-- for i = 1, #TOOLTIPS_LIST do
-	-- 	local tooltipName = TOOLTIPS_LIST[i]
-	-- 	local tooltip = _G[tooltipName]
-	-- 	--Make sure the tooltip exists.
-	-- 	if tooltip and tooltip.SetBackdrop then
-	-- 		-- if not tooltip.SetBackdrop then
-	-- 		-- 	Mixin(tooltip, BackdropTemplateMixin)
-	-- 		-- end
-	-- 		-- Store the original backdrop so we can revert.
-	-- 		-- Make sure we don't overwrite it if we update the tooltips again later.
-	-- 		if not oldDefault[tooltipName] then
-	-- 			oldDefault[tooltipName] = tooltip:GetBackdrop()
-	-- 			initialScale[tooltipName] = tooltip:GetScale()
-	-- 		end
-	-- 		tooltip:SetBackdrop(module.tooltipBackdrop)
-	-- 		if not module:IsHooked(tooltip, "OnShow") then
-	-- 			module:HookScript(tooltip, "OnShow", "OnTooltipShow")
-	-- 		end
-	-- 	else
-	-- 		--module:Mod(tooltipName.." Not Found")
-	-- 	end
-	if frame.SetBackdrop then
-		frame:SetBackdrop(module.tooltipBackdrop)
+	-- Keep Blizzard's 12.1 NineSlice layout and only change its existing
+	-- textures and colors. Adding BackdropTemplateMixin or calling SetBackdrop
+	-- here can make secret tooltip dimensions enter Backdrop.lua arithmetic.
+	local nineSlice = frame.NineSlice
+	if nineSlice then
+		nineSlice:SetAlpha(1)
+
+		local background = nineSlice.Center
+		if background and background.SetTexture then
+			background:SetTexture(Media:Fetch("background", db.BgTexture))
+			background:SetTexCoord(0, 1, 0, 1)
+			nineSlice:SetCenterColor(1, 1, 1, 1)
+		end
+
+		if nineSlice.SetBorderColor then
+			nineSlice:SetBorderColor(module:RGBA("Border"))
+		end
 	end
 end
 
 -- Debug function, this will call UpdateTooltipBackdrop, optionally add a tooltip before doing so.
 function LUI:ForceTooltipUpdate(ttip)
-	if ttip then
-		tinsert(TOOLTIPS_LIST, ttip)
+	if not ttip then
+		module:UpdateBackdropColors()
+		return
 	end
-	module:UpdateTooltipBackdrop()
+
+	local frame = ttip
+	if type(ttip) == "string" then
+		frame = _G[ttip]
+		local registered
+		for i = 1, #TOOLTIPS_LIST do
+			if TOOLTIPS_LIST[i] == ttip then
+				registered = true
+				break
+			end
+		end
+		if not registered then
+			tinsert(TOOLTIPS_LIST, ttip)
+		end
+	end
+
+	module:UpdateTooltipBackdrop(frame)
 end
 
 function module:GetUnitColor(unit)
-	if UnitIsPlayer(unit) and not UnitHasVehicleUI(unit) then
+	local isPlayer = UnitIsPlayer(unit)
+	local hasVehicleUI = UnitHasVehicleUI(unit)
+	if issecretvalue(isPlayer) or issecretvalue(hasVehicleUI) then
+		return 1, 1, 1
+	elseif isPlayer and not hasVehicleUI then
 		local _, class = UnitClass(unit)
+		if issecretvalue(class) then return 1, 1, 1 end
 		return module:RGB(class)
 	else
 		return LUI:GetReactionColor(unit)
@@ -253,14 +260,11 @@ end
 -- ####################################################################################################################
 
 function module:SetTooltip(tooltip, name)
-	-- Hide the textures
+	-- Retail tooltips use SharedTooltipTemplate/NineSlice natively.
+	-- Keep that native layout instead of mixing BackdropTemplate into
+	-- Blizzard/Ace tooltips after creation.
 	if tooltip.NineSlice then
-		tooltip.NineSlice:SetAlpha(0)
-	end
-
-	-- Add backdrop functionality
-	if not tooltip.SetBackdrop then
-		Mixin(tooltip, _G.BackdropTemplateMixin)
+		tooltip.NineSlice:SetAlpha(1)
 	end
 
 	-- Store initial scale for future reference
@@ -319,61 +323,58 @@ function module:SetStatusHealthBar()
 end
 
 function module:SetBorderColor(frame)
-	if not frame.SetBackdropColor then return end
-	
+	-- WoW 12.1 tooltips keep Blizzard's native NineSlice backdrop. We still
+	-- color the tooltip health bar, but do not call legacy backdrop methods.
 	local health = GameTooltipStatusBar
 	local tooltipData = frame.GetTooltipData and frame:GetTooltipData()
 	local tooltipType = tooltipData and tooltipData.type
-	frame:SetBackdropColor(module:RGB("Background"))
-	frame:SetBackdropBorderColor(module:RGB("Border"))
-	health:SetStatusBarColor(module:RGB("Border"))
+	local r, g, b = module:RGB("Border")
 
-	if not issecretvalue(tooltipType) then
-		
-		if tooltipType == Enum.TooltipDataType.Unit then
-			local unit = module:GetTooltipUnit(tooltipData)
+	if db.Colors.Border.t == "Class"
+		and not issecretvalue(tooltipType)
+		and tooltipType == Enum.TooltipDataType.Unit then
+		local unit = module:GetTooltipUnit(tooltipData, frame)
+		if unit then
 			local playerUnit = UnitIsPlayer(unit)
-			local reaction = unit and UnitReaction(unit, "player")
+			local reaction = UnitReaction(unit, "player")
 			if not issecretvalue(playerUnit) and playerUnit then
-				-- Tooltip is a Player
 				local _, class = UnitClass(unit)
-				local r, g, b = module:RGB(class)
-				frame:SetBackdropBorderColor(r, g, b)
-				health:SetStatusBarColor(r, g, b)
-			elseif not issecretvalue(reaction) and reaction then
-				-- Tooltip is an NPC
-				local r, g, b = LUI:GetReactionColor(unit)
-				frame:SetBackdropBorderColor(r, g, b)
-				health:SetStatusBarColor(r, g, b)
-			end
-
-		elseif tooltipType == Enum.TooltipDataType.Item then
-			local itemLink = tooltipData.guid and C_Item.GetItemLinkByGUID(tooltipData.guid) or tooltipData.hyperlink
-			if itemLink then
-				local _, _, quality = GetItemInfo(itemLink)
-				-- Only need to change border color for Uncommon and above.
-				if quality and quality >= 2 then
-					local r, g, b = GetItemQualityColor(quality)
-					frame:SetBackdropBorderColor(r, g, b)
+				if not issecretvalue(class) then
+					r, g, b = module:RGB(class)
 				end
+			elseif not issecretvalue(reaction) and reaction then
+				r, g, b = LUI:GetReactionColor(unit)
 			end
 		end
+	end
 
+	health:SetStatusBarColor(r, g, b)
+	if frame.NineSlice and frame.NineSlice.SetBorderColor then
+		frame.NineSlice:SetBorderColor(r, g, b, 1)
 	end
 end
 
 function module:UpdateBackdropColors()
-	GameTooltip:SetBackdropColor(module:RGB("Background"))
-	GameTooltip:SetBackdropBorderColor(module:RGB("Border"))
+	for i = 1, #TOOLTIPS_LIST do
+		module:UpdateTooltipBackdrop(_G[TOOLTIPS_LIST[i]])
+	end
 	GameTooltipStatusBar:SetStatusBarColor(module:RGB("Border"))
 end
+
+function module:Refresh()
+	db = module.db.profile
+	module:SetStatusHealthBar()
+	module:UpdateBackdropColors()
+end
+
+module.RefreshColors = module.Refresh
 
 -- ####################################################################################################################
 -- ##### Module Hooks and Scripts #####################################################################################
 -- ####################################################################################################################
 
 function module.OnStatusBarValueChanged(frame, value_)
-	local unit = module:GetTooltipUnit(GameTooltip:GetTooltipData())
+	local unit = module:GetTooltipUnit(GameTooltip:GetTooltipData(), GameTooltip)
 	if not unit then return end
 
 	if not frame.text then
@@ -383,12 +384,21 @@ function module.OnStatusBarValueChanged(frame, value_)
 	end
 
 	if unit then
-		if UnitIsGhost(unit) then
+		local isGhost = UnitIsGhost(unit)
+		local isDead = UnitIsDead(unit)
+		if issecretvalue(isGhost) or issecretvalue(isDead) then
+			frame.text:SetText("")
+		elseif isGhost then
 			frame.text:SetText(L["Tooltip_Ghost"])
-		elseif UnitIsDead(unit) then
+		elseif isDead then
 			frame.text:SetText(_G.DEAD)
 		else
-			frame.text:SetFormattedText("%s / %s", BreakUpLargeNumbers(UnitHealth(unit)), BreakUpLargeNumbers(UnitHealthMax(unit)))
+			local current, maximum = UnitHealth(unit), UnitHealthMax(unit)
+			if issecretvalue(current) or issecretvalue(maximum) then
+				frame.text:SetText("")
+			else
+				frame.text:SetFormattedText("%s / %s", BreakUpLargeNumbers(current), BreakUpLargeNumbers(maximum))
+			end
 		end
 		frame:Show()
 	else
@@ -413,6 +423,52 @@ function module:OnTooltipShow(frame)
 
 	module:UpdateTooltipBackdrop(frame)
 	module:SetBorderColor(frame)
+
+end
+
+local function GetGuildTooltipLine(data)
+	local lines = data and data.lines
+	if not lines or issecretvalue(lines) then return end
+
+	-- Blizzard does not assign a dedicated TooltipDataLineType to the guild
+	-- row. In a player tooltip the guild row directly precedes the localized
+	-- level row, so identify both from the structured tooltip data.
+	local guildLine = lines[2]
+	local levelLine = lines[3]
+	local unitLine = lines[1]
+	if not unitLine or not guildLine or not levelLine
+		or issecretvalue(unitLine) or issecretvalue(guildLine)
+		or issecretvalue(levelLine) then return end
+
+	local guildText = guildLine.leftText
+	local levelText = levelLine.leftText
+	if not guildText or not levelText
+		or issecretvalue(guildText) or issecretvalue(levelText) then return end
+
+	if levelText:find(LEVEL, 1, true) then
+		local unit = unitLine.unitToken
+		if issecretvalue(unit) then unit = nil end
+		return 2, guildText, unit
+	end
+end
+
+function module:ApplyGuildColor(frame, data)
+	if not frame or frame:IsForbidden() then return end
+
+	local lineIndex, tooltipGuild, unit = GetGuildTooltipLine(data)
+	if not tooltipGuild or not lineIndex then return end
+
+	local guildColorName = "Guild"
+	local isMyGuild = unit and UnitIsInMyGuild(unit)
+	if not issecretvalue(isMyGuild) and isMyGuild then
+		guildColorName = "MyGuild"
+	end
+
+	local frameName = frame:GetName()
+	local guildLine = frameName and _G[frameName.."TextLeft"..lineIndex]
+	if guildLine then
+		guildLine:SetTextColor(module:RGB(guildColorName))
+	end
 end
 
 --- Tooltip Processing function
@@ -420,100 +476,66 @@ end
 ---@param data TooltipData
 function module.OnGameTooltipSetUnit(frame, data)
 	if frame:IsForbidden() then return end
-	-- luacheck: globals GameTooltipTextLeft1 GameTooltipTextLeft2
+	-- luacheck: globals GameTooltipTextLeft1
 	
 	-- We're only interested in setting up the GameTooltip itself, not all frames of that type.
 	if not frame.GetName or frame:GetName() ~= "GameTooltip" then return end
+
+	-- Blizzard applies the unit tooltip layout after OnShow. Reapply the selected
+	-- background texture after the tooltip data is complete.
+	module:UpdateTooltipBackdrop(frame)
 	
 	if db.HideCombatUnit and InCombatLockdown() then
 		return frame:Hide()
 	end
-	local unit = module:GetTooltipUnit(data)
-	if not unit then return frame:Hide() end
 
-	-- Hide tooltip on unitframes if that option is enabled
-	if frame:GetOwner() == UIParent and db.HideUF then
+	-- The tooltip data is authoritative even when Blizzard does not expose a
+	-- usable unit token for the hovered player.
+	module:ApplyGuildColor(frame, data)
+
+	-- oUF frames expose their active unit through __unit.
+	local owner = frame:GetOwner()
+	if db.HideUF and owner and owner.__unit then
 		return frame:Hide()
 	end
 
-	local sex = UnitSex(unit)
-	local race = UnitRace(unit)
-	local level = UnitLevel(unit)
+	local unit = module:GetTooltipUnit(data, frame)
+	-- Blizzard can populate a valid tooltip even when its protected GUID cannot
+	-- be resolved back to a public unit token. Keep that native tooltip intact.
+	if not unit then return end
+
 	local title = UnitPVPName(unit)
-	local guild = GetGuildInfo(unit)
 	local name, realm = UnitName(unit)
-	local creatureType = UnitCreatureType(unit)
-	local localizedClass, class_ = UnitClass(unit)
-	local classification = UnitClassification(unit)
+	local isPlayer = UnitIsPlayer(unit)
+
+	-- Identity fields can be secret in 12.1. Do not concatenate/index them.
+	if issecretvalue(title) or issecretvalue(name) or issecretvalue(realm)
+		or issecretvalue(isPlayer) then
+		return
+	end
 	local realmSuffix = (realm and " - "..realm) or ""
 
-	local diffColor = CreateColor(LUI:GetDifficultyColor(level))
 	local unitColor = CreateColor(module:GetUnitColor(unit))
 
 	local tooltipText = unitColor:WrapTextInColorCode((title or name)..realmSuffix)
 	GameTooltipTextLeft1:SetText(tooltipText or "")
 
-	local offset = 2
-	if UnitIsPlayer(unit) then
+	if isPlayer then
 		-- Display status next to name
 		if not issecretvalue(UnitIsDND(unit)) and UnitIsDND(unit) then
 			frame:AppendText(" "..CHAT_FLAG_DND)
 		elseif not issecretvalue(UnitIsAFK(unit)) and UnitIsAFK(unit) then
 			frame:AppendText(" "..CHAT_FLAG_AFK)
 		end
-		if guild then
-			local guildColorName = "Guild"
-			-- Color guild name differently if it's your guild
-			if IsInGuild() and GetGuildInfo("player") == guild then
-				guildColorName = "MyGuild"
-			end
-			GameTooltipTextLeft2:SetText(module:ColorText(guild, guildColorName))
-			offset = offset + 1
-		end
-	end
-
-	-- The line with level information isnt always the same, so we need to do some scanning.
-	for i = offset, frame:NumLines() do
-		local line = _G["GameTooltipTextLeft"..i]
-		local text = line and line:GetText()
-		if text then
-			line:SetFormattedText("%s", text)
-		end
-
-		-- if text then
-		-- 	-- Level line for players
-		-- 	-- if text:find(LEVEL) and race then
-		-- 	if race then
-		-- 		local levelString = (level > 0 and level) or "??"
-		-- 		local levelText = diffColor:WrapTextInColorCode(levelString)
-		-- 		local classText = unitColor:WrapTextInColorCode(localizedClass)
-		-- 		local sexString = (db.ShowSex) and LUI.GENDERS[sex].." " or ""
-		-- 		line:SetFormattedText("%s %s%s %s", levelText, sexString, race, classText)
-
-		-- 	-- Level line for creatures
-		-- 	-- elseif text:find(LEVEL) or (creatureType and text:find(creatureType)) then
-		-- 	elseif creatureType then
-		-- 		-- Need to find a new way to detect world bosses
-		-- 		-- if text:find(BOSS) then
-		-- 		-- 	-- Always color world bosses as skulls.
-		-- 		-- 	classification = "worldboss"
-		-- 		-- 	diffColor:SetRGB(module:RGB("DiffSkull"))
-		-- 		-- end
-
-		-- 		local levelString = (level > 0 and level) or ""
-		-- 		local levelText = diffColor:WrapTextInColorCode(levelString)
-		-- 		local classificationString = diffColor:WrapTextInColorCode(MOB_CLASSIFICATION[classification])
-		-- 		line:SetFormattedText("%s%s %s", levelText, classificationString, creatureType or "")
-		-- 	-- Remove the PVP line if the option is set
-		-- 	elseif text == PVP_ENABLED and db.HidePVP then
-		-- 		line:SetText("")
-		-- 	end
-		-- end
 	end
 
 	--Add ToT Line
-	if UnitExists(unit.."target") and unit~="player" then
-		GameTooltip:AddLine(UnitName(unit.."target"), module:GetUnitColor(unit.."target"))
+	local targetExists = UnitExists(unit.."target")
+	if not issecretvalue(targetExists) and targetExists and unit~="player" then
+		local targetName = UnitName(unit.."target")
+		if targetName ~= nil and not issecretvalue(targetName) then
+			GameTooltip:AddLine(targetName, module:GetUnitColor(unit.."target"))
+		end
 	end
 
 	module:SetBorderColor(frame)
@@ -541,6 +563,7 @@ function module:OnEnable()
 
 	-- Many tooltips are found in Blizzard LoadOnDemand addons
 	module:RegisterEvent("ADDON_LOADED", "SetTooltips")
+	module:SecureHook("SharedTooltip_SetBackdropStyle", "UpdateTooltipBackdrop")
 
 	module:SecureHook("GameTooltip_SetDefaultAnchor", function(frame, parent)
 		if db.Cursor then
@@ -552,7 +575,6 @@ function module:OnEnable()
 		end
 	end)
 
-	module:SecureHook("SharedTooltip_SetBackdropStyle", module.UpdateTooltipBackdrop)
 
 	module:SetStatusHealthBar()
 	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, module.OnGameTooltipSetUnit)

@@ -40,7 +40,7 @@ local Private = oUF.Private
 
 local unitIsUnit = Private.unitIsUnit
 
-local runemap = {1, 2, 3, 4, 5, 6}
+local runemap = { 1, 2, 3, 4, 5, 6 }
 local hasSortOrder = false
 
 local function onUpdate(self, elapsed)
@@ -52,9 +52,9 @@ end
 local function ascSort(runeAID, runeBID)
 	local runeAStart, _, runeARuneReady = GetRuneCooldown(runeAID)
 	local runeBStart, _, runeBRuneReady = GetRuneCooldown(runeBID)
-	if(runeARuneReady ~= runeBRuneReady) then
+	if (runeARuneReady ~= runeBRuneReady) then
 		return runeARuneReady
-	elseif(runeAStart ~= runeBStart) then
+	elseif (runeAStart ~= runeBStart) then
 		return runeAStart < runeBStart
 	else
 		return runeAID < runeBID
@@ -64,9 +64,9 @@ end
 local function descSort(runeAID, runeBID)
 	local runeAStart, _, runeARuneReady = GetRuneCooldown(runeAID)
 	local runeBStart, _, runeBRuneReady = GetRuneCooldown(runeBID)
-	if(runeARuneReady ~= runeBRuneReady) then
+	if (runeARuneReady ~= runeBRuneReady) then
 		return runeBRuneReady
-	elseif(runeAStart ~= runeBStart) then
+	elseif (runeAStart ~= runeBStart) then
 		return runeAStart > runeBStart
 	else
 		return runeAID > runeBID
@@ -79,27 +79,27 @@ local function UpdateColor(self, event)
 	local spec = C_SpecializationInfo.GetSpecialization() or 0
 
 	local color
-	if(spec > 0 and spec < 4 and element.colorSpec) then
+	if (spec > 0 and spec < 4 and element.colorSpec) then
 		color = self.colors.runes[spec]
 	else
 		color = self.colors.power.RUNES
 	end
 
-	if(color) then
-	local r, g, b
+	if (color) then
+		local r, g, b
 
-	if(color.GetRGB) then
-		r, g, b = color:GetRGB()
-	else
-		r, g, b = color.r, color.g, color.b
-	end
+		if (color.GetRGB) then
+			r, g, b = color:GetRGB()
+		else
+			r, g, b = color.r, color.g, color.b
+		end
 
-	if(r and g and b) then
-		for index = 1, #element do
-			element[index]:SetStatusBarColor(r, g, b)
+		if (r and g and b) then
+			for index = 1, #element do
+				element[index]:SetStatusBarColor(r, g, b)
+			end
 		end
 	end
-end
 
 	--[[ Callback: Runes:PostUpdateColor(color)
 	Called after the element color has been updated.
@@ -107,7 +107,7 @@ end
 	* self - the Runes element
 	* color - the used ColorMixin-based object (table?)
 	--]]
-	if(element.PostUpdateColor) then
+	if (element.PostUpdateColor) then
 		element:PostUpdateColor(color)
 	end
 end
@@ -120,19 +120,19 @@ local function ColorPath(self, ...)
 	* event - the event triggering the update (string)
 	* ...   - the arguments accompanying the event
 	--]]
-	(self.Runes.UpdateColor or UpdateColor) (self, ...)
+	(self.Runes.UpdateColor or UpdateColor)(self, ...)
 end
 
 local function Update(self, event)
 	local element = self.Runes
 
-	if(element.sortOrder == 'asc') then
+	if (element.sortOrder == 'asc') then
 		table.sort(runemap, ascSort)
 		hasSortOrder = true
-	elseif(element.sortOrder == 'desc') then
+	elseif (element.sortOrder == 'desc') then
 		table.sort(runemap, descSort)
 		hasSortOrder = true
-	elseif(hasSortOrder) then
+	elseif (hasSortOrder) then
 		table.sort(runemap)
 		hasSortOrder = false
 	end
@@ -141,17 +141,17 @@ local function Update(self, event)
 	local rune, start, duration, runeReady
 	for index, runeID in next, runemap do
 		rune = element[index]
-		if(not rune) then break end
+		if (not rune) then break end
 
-		if(UnitHasVehicleUI('player')) then
+		if (UnitHasVehicleUI('player')) then
 			rune:Hide()
 		else
 			start, duration, runeReady = GetRuneCooldown(runeID)
-			if(runeReady) then
+			if (runeReady) then
 				rune:SetMinMaxValues(0, 1)
 				rune:SetValue(1)
 				rune:SetScript('OnUpdate', nil)
-			elseif(start) then
+			elseif (start) then
 				rune.duration = currentTime - start
 				rune:SetMinMaxValues(0, duration)
 				rune:SetValue(0)
@@ -168,7 +168,7 @@ local function Update(self, event)
 	* self    - the Runes element
 	* runemap - the ordered list of runes' indices (table)
 	--]]
-	if(element.PostUpdate) then
+	if (element.PostUpdate) then
 		return element:PostUpdate(runemap)
 	end
 end
@@ -181,7 +181,7 @@ local function Path(self, ...)
 	* event - the event triggering the update (string)
 	* ...   - the arguments accompanying the event
 	--]]
-	(self.Runes.Override or Update) (self, ...)
+	(self.Runes.Override or Update)(self, ...)
 end
 
 local function AllPath(...)
@@ -196,7 +196,7 @@ end
 
 local function Disable(self)
 	local element = self.Runes
-	if(element) then
+	if (element) then
 		for i = 1, #element do
 			element[i]:Hide()
 		end
@@ -207,20 +207,20 @@ local function Disable(self)
 end
 
 local function Enable(self, unit)
-	if(UnitClassBase('player') ~= 'DEATHKNIGHT') then
+	if (UnitClassBase('player') ~= 'DEATHKNIGHT') then
 		Disable(self)
 
 		return false
 	end
 
 	local element = self.Runes
-	if(element and unitIsUnit(unit, 'player')) then
+	if (element and unitIsUnit(unit, 'player')) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 
 		for i = 1, #element do
 			local rune = element[i]
-			if(rune:IsObjectType('StatusBar') and not rune:GetStatusBarTexture()) then
+			if (rune:IsObjectType('StatusBar') and not rune:GetStatusBarTexture()) then
 				rune:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 			end
 		end

@@ -10,6 +10,7 @@ local LUI = select(2, ...)
 ---@class LUI.Unitframes
 local module = LUI:GetModule("Unitframes")
 local Fader = LUI:GetModule("Fader", true) --[[@as LUI.Fader]]
+local InCombatLockdown = _G.InCombatLockdown
 
 local widgetLists = AceGUIWidgetLSMlists
 
@@ -80,6 +81,19 @@ local nameLenghts = {"Short", "Medium", "Long"}
 local growthY = {"UP", "DOWN"}
 local growthX = {"LEFT", "RIGHT"}
 
+local directlySpawnedUnits = {}
+for _, unit in ipairs(module.unitsSpawn) do
+	directlySpawnedUnits[unit] = true
+end
+
+local function RefreshUnitLayout(unit)
+	-- Child units are created by party/boss/arena/maintank parents and must not
+	-- be passed to oUF:Spawn as standalone unit tokens.
+	if directlySpawnedUnits[unit] then module.ToggleUnit(unit) end
+	module.ApplySettings(unit)
+	if module.RefreshUnitframePreview then module:RefreshUnitframePreview() end
+end
+
 function module.ToggleRangeFadeParty(enable) -- when the option calls this func, self will be info arg, so don't use self in here.
 	enable = enable or module.db.profile.party.RangeFade
 
@@ -104,17 +118,7 @@ function module:CreateHealthPredictionOptions(unit, order)
 	local disabledFunc = function() return not self.db[unit].HealthPredictionBar.Enable end
 
 	local applySettings = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then
-				module.funcs.HealthPrediction(_G[frame], _G[frame].__unit, self.db[unit])
-				if self.db[unit].HealthPredictionBar.Enable then
-					_G[frame]:EnableElement("HealthPrediction")
-				else
-					_G[frame]:DisableElement("HealthPrediction")
-				end
-				_G[frame]:UpdateAllElements('refreshUnit')
-			end
-		end
+		module.ApplySettings(unit)
 	end
 
 	local options = self:NewGroup("Heal Prediction", order, {
@@ -132,17 +136,7 @@ function module:CreateTotalAbsorbOptions(unit, order)
 	local disabledFunc = function() return not self.db[unit].TotalAbsorbBar.Enable end
 
 	local applySettings = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then
-				module.funcs.TotalAbsorb(_G[frame], _G[frame].__unit, self.db[unit])
-				if self.db[unit].TotalAbsorbBar.Enable then
-					_G[frame]:EnableElement("TotalAbsorb")
-				else
-					_G[frame]:DisableElement("TotalAbsorb")
-				end
-				_G[frame]:UpdateAllElements('refreshUnit')
-			end
-		end
+		module.ApplySettings(unit)
 	end
 
 	local options = self:NewGroup("Absorb Bar", order, {
@@ -161,25 +155,14 @@ function module:CreateBarOptions(unit, order, barType)
 	local disabledColorFunc = function() return not (self.db[unit][barType.."Bar"].Enable ~= false and self.db[unit][barType.."Bar"].Color == "Individual") end or nil
 
 	local applySettings = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then
-				module.funcs[barType](_G[frame], _G[frame].__unit, self.db[unit])
-				if barType == "Health" and _G[frame].HealthPrediction then
-					module.funcs.HealthPrediction(_G[frame], _G[frame].__unit, self.db[unit])
-				end
-				_G[frame]:UpdateAllElements('refreshUnit')
-			end
-		end
+		-- Health/Power geometry can change the visual footprint and spacing of
+		-- grouped frames. Refresh the complete unit layout instead of
+		-- styling one bar through a parallel options-only path.
+		RefreshUnitLayout(unit)
 	end
 
-	local toggleSmooth = function(info, Smooth)
-		for _, frame in pairs(self.framelist[unit]) do
-			if Smooth then
-				if _G[frame] then _G[frame]:SmoothBar(_G[frame][barType]) end
-			else
-				if _G[frame] then _G[frame][barType].SetValue = _G[frame][barType].SetValue_ end
-			end
-		end
+	local toggleSmooth = function()
+		module.ApplySettings(unit)
 	end
 
 	local options = self:NewGroup(barType, order, {
@@ -212,28 +195,13 @@ end
 --barType: Totems, Runes, HolyPower, Eclipse, ShadowOrbs, ArcaneCharges, WarlockBars
 function module:CreatePlayerBarOptions(barType, order)
 	local barName = barNames[barType]
-	local barKey = barKeys[barType]
 
 	local isLocked = function() return not self.db.player[barType.."Bar"].Enable or self.db.player[barType.."Bar"].Lock end
 
 	local disabledFunc = function() return not self.db.player[barType.."Bar"].Enable end
 
-	local applySettings = function(info, Enable)
-		self.funcs[barKey](oUF_LUI_player, oUF_LUI_player.__unit, self.db.player)
-		if info[5] == "Enable" then
-			if Enable then
-				oUF_LUI_player:EnableElement(barKey)
-				if barType == "Totems" then
-					oUF_LUI_player[barKey]:Show()
-				end
-			else
-				oUF_LUI_player:DisableElement(barKey)
-				if barType == "Totems" then
-					oUF_LUI_player[barKey]:Hide()
-				end
-			end
-		end
-		oUF_LUI_player:UpdateAllElements('refreshUnit')
+	local applySettings = function()
+		module.ApplySettings("player")
 	end
 
 	local options = self:NewGroup(barName, order, {
@@ -257,7 +225,6 @@ end
 -- barType: "AdditionalPower", "AlternativePower"
 function module:CreatePlayerBarOverlappingOptions(barType, order)
 	local barName = barNames[barType]
-	local barKey = barKeys[barType]
 
 	local disabledFunc = function() return not module.db.profile.player[barType.."Bar"].Enable end
 	local disabledFunc2 = function() return not (module.db.profile.player[barType.."Bar"].Enable or not module.db.profile.player[barType.."Bar"].OverPower) end
@@ -273,33 +240,12 @@ function module:CreatePlayerBarOverlappingOptions(barType, order)
 	}
 
 	local applySettings = function()
-		module.funcs[barKey](oUF_LUI_player, oUF_LUI_player.__unit, self.db.player)
-		if oUF_LUI_pet and barType == "AlternativePower" then module.funcs[barKey](oUF_LUI_pet, oUF_LUI_pet.__unit, self.db.player) end
-		if self.db.player[barType.."Bar"].Enable then
-			oUF_LUI_player:EnableElement(barKey)
-			if oUF_LUI_pet and barType == "AlternativePower" then oUF_LUI_pet:EnableElement(barKey) end
-		else
-			oUF_LUI_player:DisableElement(barKey)
-			if oUF_LUI_pet and barType == "AlternativePower" then oUF_LUI_pet:DisableElement(barKey) end
-		end
+		module.ApplySettings("player")
+		if barType == "AlternativePower" then module.ApplySettings("pet") end
 	end
 
-	local smoothBar = function(self, Smooth)
-		if barType == "AdditionalPower" then
-			if Smooth then
-				oUF_LUI_player:SmoothBar(oUF_LUI_player.AdditionalPower)
-			else
-				oUF_LUI_player.AdditionalPower.SetValue = oUF_LUI_player.AdditionalPower.SetValue_
-			end
-		else
-			if Smooth then
-				oUF_LUI_player:SmoothBar(oUF_LUI_player.AlternativePower)
-				if oUF_LUI_pet then oUF_LUI_pet:SmoothBar(oUF_LUI_pet.AlternativePower) end
-			else
-				oUF_LUI_player.AlternativePower.SetValue = oUF_LUI_player.AlternativePower.SetValue_
-				if oUF_LUI_pet then oUF_LUI_pet.AlternativePower.SetValue = oUF_LUI_pet.AlternativePower.SetValue_ end
-			end
-		end
+	local smoothBar = function()
+		applySettings()
 	end
 
 	local options = self:NewGroup(barName, order, {
@@ -331,16 +277,7 @@ function module:CreateNameTextOptions(unit, order)
 	local disabledClassificationFunc = function() return not self.db[unit].NameText.Enable or not self.db[unit].NameText.ShowClassification end
 
 	local applyInfoText = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then
-				module.funcs.Info(_G[frame], _G[frame].__unit, self.db[unit])
-				if self.db[unit].NameText.Enable then
-					_G[frame].Info:Show()
-				else
-					_G[frame].Info:Hide()
-				end
-			end
-		end
+		module.ApplySettings(unit)
 	end
 
 	local options = self:NewGroup("Name", 1, {
@@ -376,16 +313,7 @@ function module:CreateRaidNameTextOptions(order)
 	local disabledColorFunc = function() return not (self.db.raid.NameText.Enable and self.db.raid.NameText.ColorByClass) end
 
 	local applySettings = function()
-		for _, frame in pairs(self.framelist.raid) do
-			if _G[frame] then
-				module.funcs.RaidInfo(_G[frame], _G[frame].__unit, self.db.raid)
-				if self.db.raid.NameText.Enable then
-					_G[frame].Info:Show()
-				else
-					_G[frame].Info:Hide()
-				end
-			end
-		end
+		module.ApplySettings("raid")
 	end
 
 	local options = self:NewGroup("Name", order, {
@@ -408,18 +336,12 @@ end
 -- parentName: "Health", "Power"
 -- textType: "Value", "Percent", "Missing"
 function module:CreateTextOptions(unit, order, parentName, textType)
-	local textFunc = parentName..textType
 	local textName = parentName.." "..textType
 	if textType == "Value" then textType = "" end
 	local textKey = parentName..textType
 
 	local applySettings = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then
-				module.funcs[textFunc](_G[frame], _G[frame].__unit, self.db[unit])
-				_G[frame]:UpdateAllElements('refreshUnit')
-			end
-		end
+		module.ApplySettings(unit)
 	end
 
 	local disabledFunc = function()
@@ -460,9 +382,7 @@ function module:CreateCombatTextOptions(unit, order)
 	local disabledCombatFunc = function() return not self.db[unit].CombatText.Enable end
 
 	local applyCombatFeedback = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then module.funcs.CombatFeedbackText(_G[frame], _G[frame].__unit, self.db[unit]) end
-		end
+		module.ApplySettings(unit)
 	end
 
 	local options = self:NewGroup("Combat", order, {
@@ -488,7 +408,6 @@ end
 
 function module:CreatePlayerBarTextOptions(barType, order)
 	local barName = barNames[barType]
-	local barKey = barKeys[barType]
 
 	local textformats = barType == "AlternativePower" and {
 		Absolut = "Absolut",
@@ -502,13 +421,8 @@ function module:CreatePlayerBarTextOptions(barType, order)
 	local disabledFunc = function() return not self.db.player[barType.."Text"].Enable end
 
 	local applySettings = function()
-		module.funcs[barKey](oUF_LUI_player, oUF_LUI_player.__unit, self.db.player)
-		if self.db.player[barType.."Bar"].Enable then
-			oUF_LUI_player:EnableElement(barKey)
-		else
-			oUF_LUI_player:DisableElement(barKey)
-		end
-		oUF_LUI_player:UpdateAllElements('refreshUnit')
+		module.ApplySettings("player")
+		if barType == "AlternativePower" then module.ApplySettings("pet") end
 	end
 
 	local options = self:NewGroup(barName, order, nil, function() return not self.db.player[barType.."Bar"].Enable end, {
@@ -533,8 +447,7 @@ function module:CreatePvpTimerOptions(order)
 	local disabledFunc = function() return not self.db.player.PvPText.Enable end
 
 	local applySettings = function()
-		module.funcs.PvP(oUF_LUI_player, oUF_LUI_player.__unit, self.db.player)
-		oUF_LUI_player:UpdateAllElements('refreshUnit')
+		module.ApplySettings("player")
 	end
 
 	local options = self:NewGroup("PvP", order, nil, function() return not self.db.player.Indicators.PvP.Enable end, {
@@ -558,10 +471,7 @@ function module:CreateAdditionalPowerTimerOptions(order)
 	local disabledColorFunc = function() return not self.db.player.AdditionalPowerText.Enable or self.db.player.AdditionalPowerText.Color ~= "Individual" end
 
 	local applySettings = function()
-		module.funcs.AdditionalPower(oUF_LUI_player, oUF_LUI_player.__unit, self.db.player)
-		if oUF_LUI_player.AlternativePower then oUF_LUI_player.AlternativePower.SetPosition() end
-		oUF_LUI_player.AdditionalPower.SetPosition()
-		oUF_LUI_player:UpdateAllElements('refreshUnit')
+		module.ApplySettings("player")
 	end
 
 	local options = self:NewGroup("Additional Power", order, nil, function() return not self.db.player.AdditionalPowerBar.Enable end, {
@@ -600,35 +510,29 @@ function module:CreateCastbarOptions(unit, order)
 	local disabledCastbarTimeFunc = function() return not (self.db[unit].Castbar.General.Enable and self.db[unit].Castbar.TimeText.Enable) end
 
 	local applyCastbar = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then
-				module.funcs.Castbar(_G[frame], _G[frame].__unit, self.db[unit])
-				if self.db[unit].Castbar.General.Enable then
-					_G[frame]:EnableElement("Castbar")
-				else
-					_G[frame]:DisableElement("Castbar")
-					_G[frame].Castbar:Hide()
-				end
-				_G[frame]:UpdateAllElements('refreshUnit')
-			end
-		end
+		module.ApplySettings(unit)
 	end
 
 	local testCastbar = function()
-		if _G[self.framelist[unit][1]]:IsShown() then
-			for _, frame in pairs(self.framelist[unit]) do
-				if _G[frame] and _G[frame].Castbar then
-					_G[frame].Castbar.max = 60
-					_G[frame].Castbar.duration = 0
-					_G[frame].Castbar.delay = 0
-					_G[frame].Castbar:SetMinMaxValues(0, 60)
-					_G[frame].Castbar.casting = true
-					_G[frame].Castbar.Text:SetText("Dummy Castbar")
-					_G[frame].Castbar:PostCastStart(_G[frame].__unit, "Dummy Castbar")
-					_G[frame].Castbar:Show()
-				end
+		if InCombatLockdown() then
+			LUI:Print("The dummy castbar can only be shown outside combat.")
+			return
+		end
+
+		local shown
+		for _, frameName in pairs(self.framelist[unit]) do
+			local frame = _G[frameName]
+			if frame and frame:IsShown() and frame.Castbar then
+				frame.Castbar:SetMinMaxValues(0, 60)
+				frame.Castbar:SetValue(30, Enum.StatusBarInterpolation.Immediate)
+				frame.Castbar.Text:SetText("Dummy Castbar")
+				frame.Castbar.Time:SetText("30.0")
+				frame.Castbar:PostCastStart(frame.__unit, nil, false, "Dummy Castbar", nil, false)
+				frame.Castbar:Show()
+				shown = true
 			end
-		else
+		end
+		if not shown then
 			LUI:Print("The "..unit.." Frame(s) must be shown for the dummy castbar to work.")
 		end
 	end
@@ -714,25 +618,13 @@ function module:CreateAuraOptions(unit, order, type)
 	local disabledCDFunc = function() return not self.db[unit].Aura[type].Enable or self.db[unit].Aura[type].DisableCooldown end
 
 	local applySettings = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then
-				module.funcs[type](_G[frame], _G[frame].__unit, self.db[unit])
-				if self.db[unit].Aura[type].Enable then
-					_G[frame]:EnableElement("Auras")
-					_G[frame][type]:Show()
-				else
-					if self.db[unit].Aura.Buffs.Enable == false and self.db[unit].Aura.Debuffs.Enable == false then
-						_G[frame]:DisableElement("Auras")
-					end
-					_G[frame][type]:Hide()
-				end
-				_G[frame]:UpdateAllElements('refreshUnit')
-			end
-		end
+		module.ApplySettings(unit)
 	end
 
 	local options = self:NewGroup(type, order, {
-		Enable = self:NewToggle("Enable", "Whether you want to show "..unit.." "..type.." or not.", 1, applySettings, "full"),
+		-- Order 1 is clipped by the current unitframe options layout. Keep the
+		-- enable switch with the other aura checkboxes where it stays visible.
+		Enable = self:NewToggle("Enable "..type, "Whether you want to show "..unit.." "..type.." or not.", 13, applySettings, "full"),
 		empty1 = self:NewDesc(" ", 2),
 		X = self:NewInputNumber("X Value", "Choose the X Value for your "..unit.." "..type..".", 3, applySettings, nil, disabledFunc),
 		Y = self:NewInputNumber("Y Value", "Choose the Y Value for your "..unit.." "..type..".", 4, applySettings, nil, disabledFunc),
@@ -761,19 +653,7 @@ function module:CreatePortraitOptions(unit, order)
 	local disabledPortraitFunc = function() return not self.db[unit].Portrait.Enable end
 
 	local applyPortrait = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then
-				module.funcs.Portrait(_G[frame], _G[frame].__unit, self.db[unit])
-				if self.db[unit].Portrait.Enable == true then
-					_G[frame]:EnableElement("Portrait")
-					_G[frame].Portrait:Show()
-				else
-					_G[frame]:DisableElement("Portrait")
-					_G[frame].Portrait:Hide()
-				end
-				_G[frame]:UpdateAllElements('refreshUnit')
-			end
-		end
+		module.ApplySettings(unit)
 	end
 
 	local options = self:NewGroup("Portrait", order, "tab", nil, disabledFunc, {
@@ -794,23 +674,14 @@ function module:CreateIconOptions(unit, order, iconType)
 	local disabledFunc = function() return not self.db[unit].Indicators[iconType].Enable end
 
 	local applySettings = function()
-		for _, frame in pairs(self.framelist[unit]) do
-			if _G[frame] then
-				module.funcs[iconlist[iconType][1]](_G[frame], _G[frame].__unit, self.db[unit])
-				for _, icon in pairs(iconlist[iconType]) do
-					if self.db[unit].Indicators[iconType].Enable then
-						_G[frame]:EnableElement(icon)
-						_G[frame]:UpdateAllElements('refreshUnit')
-					else
-						_G[frame]:DisableElement(icon)
-						_G[frame][icon]:Hide()
-					end
-				end
-			end
-		end
+		module.ApplySettings(unit)
 	end
 
 	local showHideFunc = function()
+		if InCombatLockdown() then
+			LUI:Print("Unitframe indicators can only be previewed outside combat.")
+			return
+		end
 		for _, frame in pairs(self.framelist[unit]) do
 			if _G[frame] and _G[frame][iconlist[iconType][1]] then
 				if _G[frame][iconlist[iconType][1]]:IsShown() then _G[frame][iconlist[iconType][1]]:Hide() else _G[frame][iconlist[iconType][1]]:Show() end
@@ -852,11 +723,7 @@ function module:CreateUnitOptions(unit, order)
 	end
 
 	local testFunc = function()
-		if _G[self.framelist[unit][1]] and _G[self.framelist[unit][1]]:IsShown() then
-			self["Hide"..unit.."Frames"](self)
-		else
-			self["Show"..unit.."Frames"](self)
-		end
+		module:ToggleUnitframePreview(unit)
 	end
 
 	local generalGet = function(info)
@@ -912,7 +779,7 @@ function module:CreateUnitOptions(unit, order)
 			else
 				t[1], t[2], t[3], t[4] = ...
 			end
-		elseif info[#info] == "GroupPadding" or info[#info] == "Padding" or info[#info] == "X" or info[#info] == "Y" or info[#info] == "Width" or info[#info] == "Height" or info[#info] == "Left" or info[#info] == "Top" or info[#info] == "Right" or info[#info] == "Left" then
+		elseif info[#info] == "GroupPadding" or info[#info] == "Padding" or info[#info] == "X" or info[#info] == "Y" or info[#info] == "Width" or info[#info] == "Height" or info[#info] == "Left" or info[#info] == "Top" or info[#info] == "Right" or info[#info] == "Bottom" then
 			local val = ...
 			t[info[#info]] = tonumber(val)
 
@@ -926,8 +793,7 @@ function module:CreateUnitOptions(unit, order)
 			local val = ...
 			t[info[#info]] = val
 		end
-		module.ToggleUnit(unit)
-		module.ApplySettings(unit)
+		RefreshUnitLayout(unit)
 	end
 
 	-- because of special way of get/set funcs, i add the default values manually here
@@ -936,15 +802,15 @@ function module:CreateUnitOptions(unit, order)
 		General = self:NewGroup("General", 2, "tab", generalGet, generalSet, {
 			General = self:NewGroup("General", 1, {
 				Enable = self:NewToggle("Enable", "Whether you want to show "..unit.." Frame(s) or not.", 1, false, "full") or nil,
-				UseBlizzard = (unit == "party" or unit == "Boss" or unit == "arena" or unit == "raid") and self:NewToggle("Use Blizzard "..unit.." Frames", "Whether you want to use Blizzard "..unit.." Frames or not.", 2, false, "full", function() return self.db[unit].Enable end) or nil,
+				UseBlizzard = (unit == "party" or unit == "boss" or unit == "arena" or unit == "raid") and self:NewToggle("Use Blizzard "..unit.." Frames", "Whether you want to use Blizzard "..unit.." Frames or not.", 2, false, "full", function() return self.db[unit].Enable end) or nil,
 				ShowPlayer = (unit == "party") and self:NewToggle("Show Player", "Whether you want to show yourself within the Party Frames or not.", 3, false, nil, disabledFunc) or nil,
 				ShowInRaid = (unit == "party") and self:NewToggle("Show in Raid", "Whether you want to show the Party Frames in Raid or not.", 4, false, nil, disabledFunc) or nil,
-				ShowInRealPartys = (unit == "party") and self:NewToggle("Show only in real Parties", "Whether you want to show the Party Frames only in real Parties or in Raids with 5 or less players too.", 5, false, nil, function() return not module.db.profile.party.Enable or module.db.profile.party.ShowInRaid end) or nil,
+				ShowInRealParty = (unit == "party") and self:NewToggle("Show only in real Parties", "Whether you want to show the Party Frames only in real Parties or in Raids with 5 or less players too.", 5, false, nil, function() return not module.db.profile.party.Enable or module.db.profile.party.ShowInRaid end) or nil,
 				empty1 = (unit ~= "player" and unit ~= "target") and self:NewDesc(" ", 6) or nil,
-				Padding = (unit == "party" or unit == "Boss" or unit == "arena" or unit == "maintank" or unit == "raid") and self:NewInputNumber("Padding", "Choose the Padding between your "..unit.." Frames.", 7, false, nil, disabledFunc) or nil,
+				Padding = (unit == "party" or unit == "boss" or unit == "arena" or unit == "maintank" or unit == "raid") and self:NewInputNumber("Padding", "Choose the Padding between your "..unit.." Frames.", 7, false, nil, disabledFunc) or nil,
 				GroupPadding = (unit == "raid") and self:NewInputNumber("Group Padding", "Choose the Padding between your "..unit.." Groups.", 8, false, nil, disabledFunc) or nil,
-				GrowDirection = (unit == "party" or unit == "Boss"or unit == "arena" or unit == "maintank") and self:NewSelect("Grow Direction", "Choose the Grow Direction for your "..unit.." Frames.", 9, directions, nil, false, nil, disabledFunc) or nil,
-				empty2 = (unit == "party" or unit == "Boss" or unit == "arena" or unit == "maintank" or unit == "raid") and self:NewDesc(" ", 10) or nil,
+				GrowDirection = (unit == "party" or unit == "boss" or unit == "arena" or unit == "maintank") and self:NewSelect("Grow Direction", "Choose the Grow Direction for your "..unit.." Frames.", 9, directions, nil, false, nil, disabledFunc) or nil,
+				empty2 = (unit == "party" or unit == "boss" or unit == "arena" or unit == "maintank" or unit == "raid") and self:NewDesc(" ", 10) or nil,
 				X = self:NewInputNumber("X Value", "Choose the X Value for your "..unit.." Frame(s).", 11, false, nil, disabledFunc),
 				Y = self:NewInputNumber("Y Value", "Choose the Y Value for your "..unit.." Frame(s).", 12, false, nil, disabledFunc),
 				Point = self:NewSelect("Point", "Choose the Point for your "..unit.." Frame(s).", 13, positions, nil, false, nil, disabledFunc),
@@ -953,8 +819,8 @@ function module:CreateUnitOptions(unit, order)
 				Height = self:NewInputNumber("Height", "Choose the Height for your "..unit.." Frame(s).", 16, false, nil, disabledFunc),
 				Width = self:NewInputNumber("Width", "Choose the Width for your "..unit.." Frame(s).", 17, false, nil, disabledFunc),
 				Scale = (unit ~= "raid" and ufMover[unit]) and self:NewSlider("Scale", "Choose the Scale for your "..unit.." Frame(s).\n\nDefault: 100%", 18, 0.1, 2, 0.01, false, nil, nil, disabledFunc) or nil,
-				empty4 = (unit == "arena" or unit == "Boss" or unit == "maintank" or unit == "party") and self:NewDesc(" ", 19) or nil,
-				Toggle = (unit == "arena" or unit == "Boss" or unit == "maintank") and self:NewExecute("Show/Hide", "Toggles the "..unit.." Frames", 20, testFunc, nil, nil, disabledFunc) or nil,
+				empty4 = (unit == "arena" or unit == "boss" or unit == "maintank" or unit == "party") and self:NewDesc(" ", 19) or nil,
+				Toggle = (unit == "arena" or unit == "boss" or unit == "maintank") and self:NewExecute("Show/Hide", "Toggles the "..unit.." Frames", 20, testFunc, nil, nil, disabledFunc) or nil,
 				RangeFade = (unit == "party") and self:NewToggle("Fade Out of Range", "Whether you want Party Frames to fade if that player is more than 40 yards away or not.", 21, false, nil, function() return not (self.db.party.Enable and not self.db.party.Fader.Enable) end) or nil,
 				empty5 = self:NewHeader("Reset to Defaults", 22),
 				ResetToDefaults = self:NewExecute("Reset to Defaults", "Reset this unitframe's settings to the defaults.\n\nRequires a UI reload.", 23, function() self.db[unit] = {} ReloadUI() end, true),

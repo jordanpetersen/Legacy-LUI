@@ -19,10 +19,6 @@ Default textures will be applied if the layout does not provide custom ones. See
                    1.5 (number).
 .useAtlasSize    - Makes the element use preprogrammed atlas' size instead of its set dimensions (boolean)
 
-## Attributes
-
-.status - the unit's ready check status (string?)['ready', 'noready', 'waiting']
-
 ## Examples
 
     -- Position and size
@@ -49,60 +45,43 @@ local function OnFinished(self)
 
 	* self - the ReadyCheckIndicator element
 	--]]
-	if(element.PostUpdateFadeOut) then
+	if (element.PostUpdateFadeOut) then
 		element:PostUpdateFadeOut()
 	end
 end
 
 local function Update(self, event)
 	local element = self.ReadyCheckIndicator
-	local unit = self.unit
+	local unit = self.__unit
 
 	--[[ Callback: ReadyCheckIndicator:PreUpdate()
 	Called before the element has been updated.
 
 	* self - the ReadyCheckIndicator element
 	--]]
-	if(element.PreUpdate) then
+	if (element.PreUpdate) then
 		element:PreUpdate()
 	end
 
 	local status = GetReadyCheckStatus(unit)
-	if(unitExists(unit) and status) then
-		if(status == 'ready') then
-			if(element.readyTexture) then
-				element:SetTexture(element.readyTexture) -- DEPRECATED
-			else
-				element:SetAtlas('UI-LFG-ReadyMark-Raid', element.useAtlasSize)
-			end
-		elseif(status == 'notready') then
-			if(element.notReadyTexture) then
-				element:SetTexture(element.notReadyTexture) -- DEPRECATED
-			else
-				element:SetAtlas('UI-LFG-DeclineMark-Raid', element.useAtlasSize)
-			end
+	if (unitExists(unit) and status) then
+		if (status == 'ready') then
+			element:SetAtlas('UI-LFG-ReadyMark-Raid', element.useAtlasSize)
+		elseif (status == 'notready') then
+			element:SetAtlas('UI-LFG-DeclineMark-Raid', element.useAtlasSize)
 		else
-			if(element.waitingTexture) then
-				element:SetTexture(element.waitingTexture) -- DEPRECATED
-			else
-				element:SetAtlas('UI-LFG-PendingMark-Raid', element.useAtlasSize)
-			end
+			element:SetAtlas('UI-LFG-PendingMark-Raid', element.useAtlasSize)
 		end
 
-		element.status = status
 		element:Show()
-	elseif(event ~= 'READY_CHECK_FINISHED') then
-		element.status = nil
+	elseif (event ~= 'READY_CHECK_FINISHED') then
+		status = nil
 		element:Hide()
 	end
 
-	if(event == 'READY_CHECK_FINISHED') then
-		if(element.status == 'waiting') then
-			if(element.notReadyTexture) then
-				element:SetTexture(element.notReadyTexture) -- DEPRECATED
-			else
-				element:SetAtlas('UI-LFG-DeclineMark-Raid', element.useAtlasSize)
-			end
+	if (event == 'READY_CHECK_FINISHED') then
+		if (status == 'waiting') then
+			element:SetAtlas('UI-LFG-DeclineMark-Raid', element.useAtlasSize)
 		end
 
 		element.Animation:Play()
@@ -114,7 +93,7 @@ local function Update(self, event)
 	* self   - the ReadyCheckIndicator element
 	* status - the unit's ready check status (string?)['ready', 'notready', 'waiting']
 	--]]
-	if(element.PostUpdate) then
+	if (element.PostUpdate) then
 		return element:PostUpdate(status)
 	end
 end
@@ -127,7 +106,7 @@ local function Path(self, ...)
 	* event - the event triggering the update (string)
 	* ...   - the arguments accompanying the event
 	--]]
-	return (self.ReadyCheckIndicator.Override or Update) (self, ...)
+	return (self.ReadyCheckIndicator.Override or Update)(self, ...)
 end
 
 local function ForceUpdate(element)
@@ -137,7 +116,7 @@ end
 local function Enable(self, unit)
 	local element = self.ReadyCheckIndicator
 	unit = unit and unit:match('(%a+)%d*$')
-	if(element and (unit == 'party' or unit == 'raid')) then
+	if (element and (unit == 'party' or unit == 'raid')) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 
@@ -161,7 +140,7 @@ end
 
 local function Disable(self)
 	local element = self.ReadyCheckIndicator
-	if(element) then
+	if (element) then
 		element:Hide()
 
 		self:UnregisterEvent('READY_CHECK', Path)

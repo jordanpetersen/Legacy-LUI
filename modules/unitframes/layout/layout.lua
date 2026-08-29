@@ -16,34 +16,84 @@ local Media = LibStub("LibSharedMedia-3.0")
 ---@class oUF
 local oUF = LUI.oUF
 
-local UnitHealth, UnitHealthMax, UnitPower, UnitPowerMax = _G.UnitHealth, _G.UnitHealthMax, _G.UnitPower, _G.UnitPowerMax
+local UnitPower, UnitPowerMax = _G.UnitPower, _G.UnitPowerMax
 local UnitIsUnit, UnitExists, UnitIsGhost, UnitIsDead = _G.UnitIsUnit, _G.UnitExists, _G.UnitIsGhost, _G.UnitIsDead
-local UnitName, UnitGUID, UnitIsPVP, UnitReaction = _G.UnitName, _G.UnitGUID, _G.UnitIsPVP, _G.UnitReaction
-local UnitIsPlayer, UnitIsEnemy, UnitIsTapDenied = _G.UnitIsPlayer, _G.UnitIsEnemy, _G.UnitIsTapDenied
+local UnitName, UnitGUID, UnitIsPVP = _G.UnitName, _G.UnitGUID, _G.UnitIsPVP
+local UnitIsPlayer, UnitIsEnemy = _G.UnitIsPlayer, _G.UnitIsEnemy
 local UnitIsVisible, UnitIsConnected, UnitIsAFK = _G.UnitIsVisible, _G.UnitIsConnected, _G.UnitIsAFK
 local GetThreatStatusColor, UnitThreatSituation = _G.GetThreatStatusColor, _G.UnitThreatSituation
 local UnitPowerType, GetUnitPowerBarTextureInfo = _G.UnitPowerType, _G.GetUnitPowerBarTextureInfo
 local SetPortraitTexture, UnitHasVehicleUI = _G.SetPortraitTexture, _G.UnitHasVehicleUI
 local UnitClass, UnitLevel, GetPVPTimer = _G.UnitClass, _G.UnitLevel, _G.GetPVPTimer
-local GetShapeshiftFormID, GetTotemInfo = _G.GetShapeshiftFormID, _G.GetTotemInfo
-local UnitSpellHaste, UnitChannelInfo = _G.UnitSpellHaste, _G.UnitChannelInfo
+local GetShapeshiftFormID = _G.GetShapeshiftFormID
 local DebuffTypeColor =  _G.DebuffTypeColor
 local issecretvalue = _G.issecretvalue
 local format = string.format
 local floor = math.floor
 local pcall = _G.pcall
 
+local function GetUnitClassColor(unit)
+	local _, class = UnitClass(unit)
+
+	-- oUF 14.0.1 uses Blizzard's class-color API when UnitClass returns a
+	-- secret class token. Custom class colors cannot be indexed with a secret.
+	if issecretvalue(class) then
+		return C_ClassColor.GetClassColor(class)
+	elseif class then
+		return module.colors.class[class]
+	end
+end
+
+-- Let oUF query the primary power with the explicit type returned by Blizzard.
+-- This keeps secret values inside Blizzard/oUF's StatusBar update path while
+-- avoiding incorrect zero values seen for some non-player Energy units when
+-- UnitPower is queried with an omitted type.
+local function GetPrimaryPower(_, unit)
+	return UnitPowerType(unit), 0
+end
+
+-- The "By Class" option uses class colors for players and power-type colors
+-- for NPCs. oUF exposes Power.UpdateColor specifically for layout overrides,
+-- so this keeps the distinction inside the supported element color path.
+local function UpdatePowerClassOrType(self, event, unit)
+	if self.__unit ~= unit then return end
+
+	local power = self.Power
+	local color
+	if UnitIsPlayer(unit) or UnitInPartyIsAI(unit) then
+		color = GetUnitClassColor(unit)
+	else
+		local powerType, powerToken = UnitPowerType(unit)
+		color = self.colors.power[powerToken]
+			or self.colors.power[powerType]
+			or self.colors.power.MANA
+	end
+
+	if color then
+		power:SetStatusBarColor(color:GetRGB())
+	end
+	if power.PostUpdateColor then
+		power:PostUpdateColor(unit, color)
+	end
+end
+
+local function BarInterpolation(enabled)
+	return enabled and Enum.StatusBarInterpolation.ExponentialEaseOut
+		or Enum.StatusBarInterpolation.Immediate
+end
+
+local CastbarSecondsFormatter = C_StringUtil.CreateSecondsFormatter()
+CastbarSecondsFormatter:SetDefaultAbbreviation(Enum.SecondsFormatterAbbreviation.OneLetter)
+CastbarSecondsFormatter:SetMinInterval(Enum.SecondsFormatterInterval.Seconds)
+CastbarSecondsFormatter:SetMillisecondsThreshold(60)
+
 local ALT_POWER_BAR_PAIR_DISPLAY_INFO = _G.ALT_POWER_BAR_PAIR_DISPLAY_INFO
 local ADDITIONAL_POWER_BAR_INDEX = _G.ADDITIONAL_POWER_BAR_INDEX
 local MAX_TOTEMS = _G.MAX_TOTEMS
+local MAX_CLASS_POWER_POINTS = 10
 
-local EVOKER_DPS_POWER_NEXUS_NODE = 93276
-local EVOKER_AUG_POWER_NEXUS_NODE = 93201
-local EVOKER_HEAL_POWER_NEXUS_NODE = 93249
-local MONK_ASCENSION_NODE = 101037
-local ROGUE_SECRET_STRATEGEM_NODE = 90722
-local ROGUE_DEEPER_STRATAGEM_NODE = 90750
-local ROGUE_DEEPER_STRATAGEM_ENTRY = 112642
+local supportsClassPower = LUI.DEMONHUNTER or LUI.DRUID or LUI.EVOKER or LUI.HUNTER or LUI.MAGE
+	or LUI.MONK or LUI.PALADIN or LUI.ROGUE or LUI.SHAMAN or LUI.WARLOCK
 
 ------------------------------------------------------------------------
 --	Textures and Medias
@@ -109,22 +159,6 @@ local cornerAuras = {
 	},
 }
 
-local channelingTicks -- base time between ticks
-do
-	local classChannels = {
-	}
-
-	channelingTicks = {
-		["First Aid"] = 1 -- Bandages
-	}
-	if classChannels[LUI.playerClass] then
-		for k, v in pairs(classChannels[LUI.playerClass]) do
-			channelingTicks[k] = v
-		end
-	end
-	wipe(classChannels)
-end
-
 ------------------------------------------------------------------------
 --	Dont edit this if you dont know what you are doing!
 ------------------------------------------------------------------------
@@ -141,6 +175,13 @@ NotFullCurve:SetType(Enum.LuaCurveType.Step)
 NotFullCurve:AddPoint(0.999, 1)
 NotFullCurve:AddPoint(1, 0)
 
+local PowerActiveCurve = C_CurveUtil.CreateCurve()
+PowerActiveCurve:SetType(Enum.LuaCurveType.Step)
+PowerActiveCurve:AddPoint(0, 0)
+PowerActiveCurve:AddPoint(0.001, 1)
+PowerActiveCurve:AddPoint(0.999, 1)
+PowerActiveCurve:AddPoint(1, 0)
+
 -- Show only when full
 local IsFullCurve = C_CurveUtil.CreateCurve()
 IsFullCurve:SetType(Enum.LuaCurveType.Step)
@@ -152,10 +193,6 @@ local IsEmptyCurve = C_CurveUtil.CreateCurve()
 IsEmptyCurve:SetType(Enum.LuaCurveType.Step)
 IsEmptyCurve:AddPoint(0.01, 1)
 IsEmptyCurve:AddPoint(0, 0)
-
-local function GetDisplayPower(power, unit)
-		return (UnitPowerType(unit))
-end
 
 local function SetFontString(parent, fontName, fontHeight, fontStyle)
 	local fs = parent:CreateFontString(nil, "OVERLAY")
@@ -242,122 +279,61 @@ function LUI:DebugTalents()
 	end
 end
 
-function module:GetTalentRank(nodeId, entryId)
-	local configId = C_ClassTalents.GetActiveConfigID()
-	if not configId then return false, 0 end
-	local nodeInfo = C_Traits.GetNodeInfo(configId, nodeId)
-	if not nodeInfo then return false, 0 end
-	if #nodeInfo.entryIDs > 1 then
-		if entryId and nodeInfo.activeEntry and nodeInfo.activeEntry.entryID ~= entryId then
-			return false, 0
-		end
+local function GetUnitFrameTooltipUnit(self)
+	local unit = self:GetAttribute("unit")
+	if type(unit) == "string" and not issecretvalue(unit) then
+		return unit
 	end
-	return (nodeInfo.activeRank > 0), nodeInfo.activeRank
+
+	unit = self.__unit
+	if type(unit) == "string" and not issecretvalue(unit) then
+		return unit
+	end
+end
+
+local function UpdateUnitFrameTooltip(self)
+	local unit = GetUnitFrameTooltipUnit(self)
+	if not unit then return end
+
+	GameTooltip_SetDefaultAnchor(GameTooltip, self)
+	local hasTooltip = GameTooltip:SetUnit(unit)
+	if not issecretvalue(hasTooltip) and hasTooltip then
+		GameTooltip:Show()
+		self.UpdateTooltip = UpdateUnitFrameTooltip
+	else
+		self.UpdateTooltip = nil
+	end
 end
 
 local function UnitFrame_OnEnter(self)
-	_G.UnitFrame_OnEnter(self)
-	self.Highlight:Show()
+	UpdateUnitFrameTooltip(self)
+	if self.Highlight then self.Highlight:Show() end
 end
 
 local function UnitFrame_OnLeave(self)
-	_G.UnitFrame_OnLeave(self)
-	self.Highlight:Hide()
+	self.UpdateTooltip = nil
+	GameTooltip:FadeOut()
+	if self.Highlight then self.Highlight:Hide() end
 end
 
--- StatusBar / FontString accept secret values; Lua arithmetic and AbbreviateNumbers do not.
-local function FormatUnitNumber(value, short)
-	if short and not (issecretvalue and issecretvalue(value)) then
-		return AbbreviateNumbers(value)
-	end
-	return value
-end
-
-local function OverrideHealth(self, event, unit, powerType)
-	if self.unit ~= unit then return end
+local function UpdateHealthDisplay(self, unit, current, max)
+	if self.__unit ~= unit then return end
 	local health = self.Health
 
-	-- Pass UnitHealth* straight into widgets; do not blank when secret.
-	local current = UnitHealth(unit)
-	local max = UnitHealthMax(unit)
-
 	local unitConnected = UnitIsConnected(unit)
-	local disconnected = not LUI:SecretSafe(unitConnected, true)
-
-	health:SetMinMaxValues(0, max)
-	health:SetValue(disconnected and max or current)
-
-	health.disconnected = disconnected
-
-	local _, pToken = UnitClass(unit)
-	pToken = LUI:SecretSafe(pToken, nil)
-	local color = pToken and {LUI:GetClassColor(pToken)} or {0.5, 0.5, 0.5}
-	local gradientColor = UnitHealthPercent(unit, true, self.colors.health:GetCurve()) --[[@as ColorMixin]]
-	local healthColorTex = health:GetStatusBarTexture()
-	local r, g, b = health.colorIndividual.r, health.colorIndividual.g, health.colorIndividual.b
-
-	if health.color == "By Class" then
-		local isPlayer = LUI:SecretSafe(UnitIsPlayer(unit), false)
-		if isPlayer then
-			r, g, b = unpack(color)
-			healthColorTex:SetVertexColor(r, g, b)
-		else
-			local reaction = LUI:SecretSafe(UnitReaction("player", unit), 4)
-			if reaction and reaction < 4 then
-				r, g, b = unpack(module.db.profile.Colors.Misc["Hostile"])
-				healthColorTex:SetVertexColor(r, g, b)
-			elseif reaction and reaction == 4 then
-				r, g, b = unpack(module.db.profile.Colors.Misc["Neutral"])
-				healthColorTex:SetVertexColor(r, g, b)
-			else
-				r, g, b = unpack(module.db.profile.Colors.Misc["Friendly"])
-				healthColorTex:SetVertexColor(r, g, b)
-			end
-		end
-	elseif health.color == "Individual" then
-		healthColorTex:SetVertexColor(r, g, b)
-	else
-		-- Gradient ColorMixin may itself be secret; SetVertexColor accepts secrets.
-		if gradientColor and gradientColor.GetRGB then
-			healthColorTex:SetVertexColor(gradientColor:GetRGB())
-		else
-			r, g, b = LUI:SecretSafeColorRGB(gradientColor, r, g, b)
-			healthColorTex:SetVertexColor(r, g, b)
-		end
-	end
-
-	local tapped = health.colorTapping and UnitIsTapDenied and LUI:SecretSafe(UnitIsTapDenied(unit), false)
-	if tapped then healthColorTex:SetVertexColor(unpack(module.db.profile.Colors.Misc["Tapped"])) end
-
-	-- Background multiplier needs readable RGB; fall back when vertex color args are secret.
-	r = LUI:SecretSafe(r, 0.5)
-	g = LUI:SecretSafe(g, 0.5)
-	b = LUI:SecretSafe(b, 0.5)
-
-	local mu = health.bg.multiplier or 1
-
-	if health.bg.invert == true then
-		health.bg:SetVertexColor(r+(1-r)*mu, g+(1-g)*mu, b+(1-b)*mu)
-	else
-		health.bg:SetVertexColor(r*mu, g*mu, b*mu)
-	end
-
 	local unitGhost = UnitIsGhost(unit)
 	local unitDead = UnitIsDead(unit)
 	local unitAFK = UnitIsAFK(unit)
 
 	if not issecretvalue(unitConnected) and not unitConnected then
-		health:SetValue(0)
 		health.value:SetText(health.value.ShowDead and "|cffD7BEA5<Offline>|r" or "")
 		health.valuePercent:SetText(health.valuePercent.ShowDead and "|cffD7BEA5<Offline>|r" or "")
 		health.valueMissing:SetText("")
 	elseif not issecretvalue(unitGhost) and unitGhost then
-		health:SetValue(0)
 		health.value:SetText(health.value.ShowDead and "|cffD7BEA5<Ghost>|r" or "")
 		health.valuePercent:SetText(health.valuePercent.ShowDead and "|cffD7BEA5<Ghost>|r" or "")
 		health.valueMissing:SetText("")
 	elseif not issecretvalue(unitDead) and unitDead then
-		health:SetValue(0)
 		health.value:SetText(health.value.ShowDead and "|cffD7BEA5<Dead>|r" or "")
 		health.valuePercent:SetText(health.valuePercent.ShowDead and "|cffD7BEA5<Dead>|r" or "")
 		health.valueMissing:SetText("")
@@ -366,7 +342,6 @@ local function OverrideHealth(self, event, unit, powerType)
 		local healthPercent = UnitHealthPercent(unit, false, PercentCurve)
 		local notFullAlpha = UnitHealthPercent(unit, true, NotFullCurve)
 
-		-- Raid Name Text, if health is not full, hide it
 		if self.Info.OnlyWhenFull then
 			self.Info:SetAlpha(UnitHealthPercent(unit, false, IsFullCurve))
 		else
@@ -381,7 +356,7 @@ local function OverrideHealth(self, event, unit, powerType)
 			elseif health.value.Format == "Absolut Short" then
 				health.value:SetFormattedText("%s/%s", FormatUnitNumber(current, true), FormatUnitNumber(max, true))
 			elseif health.value.Format == "Absolut Short & Percent" then
-				health.value:SetFormattedText("%s/%s | %.1f%%", FormatUnitNumber(current, true), FormatUnitNumber(max, true), healthPercent)
+				health.value:SetFormattedText("%s/%s | %.1f%%", AbbreviateNumbers(current), AbbreviateNumbers(max), healthPercent)
 			elseif health.value.Format == "Standard" then
 				health.value:SetFormattedText("%s", current)
 			elseif health.value.Format == "Standard & Percent" then
@@ -394,82 +369,26 @@ local function OverrideHealth(self, event, unit, powerType)
 				health.value:SetFormattedText("%s", current)
 			end
 
-			if health.value.color == "By Class" then
-				health.value:SetTextColor(unpack(color))
-			elseif health.value.color == "Individual" then
-				health.value:SetTextColor(health.value.colorIndividual.r, health.value.colorIndividual.g, health.value.colorIndividual.b)
-			elseif gradientColor and gradientColor.GetRGB then
-				health.value:SetTextColor(gradientColor:GetRGB())
-			else
-				local gr, gg, gb = LUI:SecretSafeColorRGB(gradientColor, 1, 1, 1)
-				health.value:SetTextColor(gr, gg, gb)
-			end
-
-			if health.value.ShowAlways then
-				health.value:SetAlpha(1)
-			else
-				health.value:SetAlpha(notFullAlpha)
-			end
+			health.value:SetAlpha(health.value.ShowAlways and 1 or notFullAlpha)
 		else
 			health.value:SetText("")
 		end
 
 		if health.valuePercent.Enable == true then
 			health.valuePercent:SetFormattedText("%.1f%%", healthPercent)
-
-			if health.valuePercent.color == "By Class" then
-				health.valuePercent:SetTextColor(unpack(color))
-			elseif health.valuePercent.color == "Individual" then
-				health.valuePercent:SetTextColor(health.valuePercent.colorIndividual.r, health.valuePercent.colorIndividual.g, health.valuePercent.colorIndividual.b)
-			elseif gradientColor and gradientColor.GetRGB then
-				health.valuePercent:SetTextColor(gradientColor:GetRGB())
-			else
-				local gr, gg, gb = LUI:SecretSafeColorRGB(gradientColor, 1, 1, 1)
-				health.valuePercent:SetTextColor(gr, gg, gb)
-			end
-
-			if health.valuePercent.ShowAlways then
-				health.valuePercent:SetAlpha(1)
-			else
-				health.valuePercent:SetAlpha(notFullAlpha)
-			end
+			health.valuePercent:SetAlpha(health.valuePercent.ShowAlways and 1 or notFullAlpha)
 		else
 			health.valuePercent:SetText("")
 		end
 
 		if health.valueMissing.Enable == true then
 			local healthMissing = UnitHealthMissing(unit)
-			if C_StringUtil and C_StringUtil.TruncateWhenZero then
-				local truncated = C_StringUtil.TruncateWhenZero(healthMissing)
-				if truncated == nil or truncated == "" then
-					health.valueMissing:SetText("")
-				elseif health.valueMissing.ShortValue == true then
-					health.valueMissing:SetFormattedText("-%s", FormatUnitNumber(healthMissing, true))
-				else
-					health.valueMissing:SetFormattedText("-%s", truncated)
-				end
-			elseif health.valueMissing.ShortValue == true then
-				health.valueMissing:SetFormattedText("-%s", FormatUnitNumber(healthMissing, true))
+			if health.valueMissing.ShortValue == true then
+				health.valueMissing:SetFormattedText("-%s", AbbreviateNumbers(healthMissing))
 			else
 				health.valueMissing:SetFormattedText("-%s", healthMissing)
 			end
-
-			if health.valueMissing.color == "By Class" then
-				health.valueMissing:SetTextColor(unpack(color))
-			elseif health.valueMissing.color == "Individual" then
-				health.valueMissing:SetTextColor(health.valueMissing.colorIndividual.r, health.valueMissing.colorIndividual.g, health.valueMissing.colorIndividual.b)
-			elseif gradientColor and gradientColor.GetRGB then
-				health.valueMissing:SetTextColor(gradientColor:GetRGB())
-			else
-				local gr, gg, gb = LUI:SecretSafeColorRGB(gradientColor, 1, 1, 1)
-				health.valueMissing:SetTextColor(gr, gg, gb)
-			end
-
-			if health.valueMissing.ShowAlways then
-				health.valueMissing:SetAlpha(1)
-			else
-				health.valueMissing:SetAlpha(notFullAlpha)
-			end
+			health.valueMissing:SetAlpha(health.valueMissing.ShowAlways and 1 or notFullAlpha)
 		else
 			health.valueMissing:SetText("")
 		end
@@ -477,207 +396,229 @@ local function OverrideHealth(self, event, unit, powerType)
 
 	if not issecretvalue(unitAFK) and unitAFK then
 		if health.value.ShowDead == true then
-			local ok, text = pcall(health.value.GetText, health.value)
-			if ok and text and not (issecretvalue and issecretvalue(text)) then
-				health.value:SetFormattedText("|cffffffff<AFK>|r %s", text)
-			elseif not ok or not text then
-				health.value:SetText("|cffffffff<AFK>|r")
-			end
+			health.value:SetText("|cffffffff<AFK>|r")
 		end
-
 		if health.valuePercent.ShowDead == true then
-			local ok, text = pcall(health.valuePercent.GetText, health.valuePercent)
-			if ok and text and not (issecretvalue and issecretvalue(text)) then
-				health.valuePercent:SetFormattedText("|cffffffff<AFK>|r %s", text)
-			elseif not ok or not text then
-				health.valuePercent:SetText("|cffffffff<AFK>|r")
-			end
+			health.valuePercent:SetText("|cffffffff<AFK>|r")
 		end
 	end
 end
 
-local function OverridePower(self, event, unit)
-	if self.unit ~= unit then return end
+local function SetHealthTextColor(health, text, unit)
+	if not text or not text.Enable then return end
+
+	if text.color == "By Class" then
+		local color = GetUnitClassColor(unit)
+		if color then
+			text:SetTextColor(color:GetRGB())
+		else
+			text:SetTextColor(1, 1, 1)
+		end
+	elseif text.color == "Individual" then
+		text:SetTextColor(text.colorIndividual.r, text.colorIndividual.g, text.colorIndividual.b)
+	else
+		local color = health.values:EvaluateCurrentHealthPercent(health.__owner.colors.health:GetCurve())
+		text:SetTextColor(color:GetRGB())
+	end
+end
+
+local function PostUpdateHealthColor(health, unit, color)
+	if health.__owner.LUIArenaUnseen then
+		health:SetStatusBarColor(0.5, 0.5, 0.5)
+		health.bg:SetVertexColor(0.5, 0.5, 0.5)
+		return
+	end
+
+	local useProfileColor = health.color == "Individual" and color == nil
+	local r, g, b
+	if color then
+		r, g, b = color:GetRGB()
+	elseif useProfileColor then
+		r, g, b = health.colorIndividual.r, health.colorIndividual.g, health.colorIndividual.b
+		health:SetStatusBarColor(r, g, b)
+	else
+		r, g, b = health:GetStatusBarColor()
+	end
+
+	-- oUF 14.0.1 can supply secret color components here. Blizzard's
+	-- vertex-color API accepts those values directly, but Lua arithmetic does not.
+	-- Preserve LUI's legacy multiplier/invert behavior only for its own fixed
+	-- Individual color, whose components come from the profile and are not secret.
+	local baseAlpha = health.bg.LUIBaseAlpha or 1
+	if useProfileColor then
+		health.bg:SetAlpha(baseAlpha)
+		local mu = health.bg.multiplier or 1
+		if health.bg.invert == true then
+			health.bg:SetVertexColor(r + (1-r) * mu, g + (1-g) * mu, b + (1-b) * mu)
+		else
+			health.bg:SetVertexColor(r * mu, g * mu, b * mu)
+		end
+	else
+		health.bg:SetVertexColor(r, g, b)
+		health.bg:SetAlpha(baseAlpha * (health.bg.multiplier or 1))
+	end
+
+	SetHealthTextColor(health, health.value, unit)
+	SetHealthTextColor(health, health.valuePercent, unit)
+	SetHealthTextColor(health, health.valueMissing, unit)
+end
+
+local function SetPowerTextColor(power, text, unit)
+	if not text or not text.Enable then return end
+
+	if text.color == "By Class" then
+		local color = GetUnitClassColor(unit)
+		if color then
+			text:SetTextColor(color:GetRGB())
+		else
+			text:SetTextColor(power:GetStatusBarColor())
+		end
+	elseif text.color == "Individual" then
+		text:SetTextColor(text.colorIndividual.r, text.colorIndividual.g, text.colorIndividual.b)
+	else
+		text:SetTextColor(power:GetStatusBarColor())
+	end
+end
+
+local function UpdatePowerDisplay(self, unit, current, min, max, displayType)
+	if self.__unit ~= unit then return end
 	local power = self.Power
+	power.LUIDisplayType = displayType
 
-	local displayType = GetDisplayPower(power, unit)
-	local current = UnitPower(unit, displayType)
-	local max = UnitPowerMax(unit, displayType)
+	local unitConnected = UnitIsConnected(unit)
+	local disconnected = not issecretvalue(unitConnected) and not unitConnected
+	local unitGhost = UnitIsGhost(unit)
+	local unitDead = UnitIsDead(unit)
 
-	local disconnected = not LUI:SecretSafe(UnitIsConnected(unit), true)
-
-	power:SetMinMaxValues(0, max)
-	power:SetValue(disconnected and max or current)
-
-	power.disconnected = disconnected
-
-	local pType, pName = UnitPowerType(unit)
-	pType = LUI:SecretSafe(pType, displayType)
-	pName = LUI:SecretSafe(pName, nil)
-	local pClass, pToken = UnitClass(unit)
-	pToken = LUI:SecretSafe(pToken, nil)
-	local color = pToken and {LUI:GetClassColor(pToken)} or {0.5, 0.5, 0.5}
-	local color2 = pName and {LUI:GetFallbackRGB(pName)} or {}
-	if color and not next(color2) then color2 = color end
-	local powerColorTex = power:GetStatusBarTexture()
-
-	local r, g, b = power.colorIndividual.r, power.colorIndividual.g, power.colorIndividual.b
-	if color and power.color == "By Class" then
-		r, g, b = unpack(color)
-		powerColorTex:SetVertexColor(r, g, b)
-	elseif power.color == "Individual" then
-		powerColorTex:SetVertexColor(r, g, b)
-	else
-		if color2 then r, g, b = unpack(color2) end
-		powerColorTex:SetVertexColor(r, g, b)
+	if disconnected or (not issecretvalue(unitGhost) and unitGhost) or (not issecretvalue(unitDead) and unitDead) then
+		power.valueMissing:SetText("")
+		power.valuePercent:SetText("")
+		power.value:SetText("")
+		return
 	end
 
-	r = LUI:SecretSafe(r, 0.5)
-	g = LUI:SecretSafe(g, 0.5)
-	b = LUI:SecretSafe(b, 0.5)
+	local powerPercent = UnitPowerPercent(unit, displayType, false, PercentCurve)
 
-	local mu = power.bg.multiplier or 1
+	if power.value.Enable == true then
+		if power.value.Format == "Absolut" then
+			power.value:SetFormattedText("%s/%s", current, max)
+		elseif power.value.Format == "Absolut & Percent" then
+			power.value:SetFormattedText("%s/%s | %.1f%%", current, max, powerPercent)
+		elseif power.value.Format == "Absolut Short" then
+			power.value:SetFormattedText("%s/%s", AbbreviateNumbers(current), AbbreviateNumbers(max))
+		elseif power.value.Format == "Absolut Short & Percent" then
+			power.value:SetFormattedText("%s/%s | %.1f%%", AbbreviateNumbers(current), AbbreviateNumbers(max), powerPercent)
+		elseif power.value.Format == "Standard" then
+			power.value:SetFormattedText("%s", current)
+		elseif power.value.Format == "Standard & Percent" then
+			power.value:SetFormattedText("%s | %.1f%%", current, powerPercent)
+		elseif power.value.Format == "Standard Short" then
+			power.value:SetFormattedText("%s", AbbreviateNumbers(current))
+		elseif power.value.Format == "Standard Short & Percent" then
+			power.value:SetFormattedText("%s | %.1f%%", AbbreviateNumbers(current), powerPercent)
+		else
+			power.value:SetFormattedText("%s", current)
+		end
 
-	if power.bg.invert == true then
-		power.bg:SetVertexColor((1-r)*mu, (1-g)*mu, (1-b)*mu)
+		local curve = C_CurveUtil.CreateCurve()
+		curve:SetType(Enum.LuaCurveType.Step)
+		curve:AddPoint(0, power.value.ShowEmpty and 1 or 0)
+		curve:AddPoint(0.001, 1)
+		curve:AddPoint(0.999, 1)
+		curve:AddPoint(1, power.value.ShowFull and 1 or 0)
+		power.value:SetAlpha(UnitPowerPercent(unit, displayType, false, curve))
 	else
-		power.bg:SetVertexColor(r*mu, g*mu, b*mu)
+		power.value:SetText("")
 	end
 
-	if not issecretvalue(UnitIsConnected(unit)) and not UnitIsConnected(unit) then
-		power:SetValue(0)
-		power.valueMissing:SetText("")
-		power.valuePercent:SetText("")
-		power.value:SetText("")
-	elseif not issecretvalue(UnitIsGhost(unit)) and UnitIsGhost(unit) then
-		power:SetValue(0)
-		power.valueMissing:SetText("")
-		power.valuePercent:SetText("")
-		power.value:SetText("")
-	elseif not issecretvalue(UnitIsDead(unit)) and UnitIsDead(unit) then
-		power:SetValue(0)
-		power.valueMissing:SetText("")
-		power.valuePercent:SetText("")
-		power.value:SetText("")
+	if power.valuePercent.Enable == true then
+		power.valuePercent:SetFormattedText("%.1f%%", powerPercent)
+		local curve = C_CurveUtil.CreateCurve()
+		curve:SetType(Enum.LuaCurveType.Step)
+		curve:AddPoint(0, power.valuePercent.ShowEmpty and 1 or 0)
+		curve:AddPoint(0.001, 1)
+		curve:AddPoint(0.999, 1)
+		curve:AddPoint(1, power.valuePercent.ShowFull and 1 or 0)
+		power.valuePercent:SetAlpha(UnitPowerPercent(unit, displayType, false, curve))
 	else
-		local powerPercent = UnitPowerPercent(unit, pType, false, PercentCurve)
+		power.valuePercent:SetText("")
+	end
 
-		if power.value.Enable == true then
-			if power.value.Format == "Absolut" then
-				power.value:SetFormattedText("%s/%s", current, max)
-			elseif power.value.Format == "Absolut & Percent" then
-				power.value:SetFormattedText("%s/%s | %.1f%%", current, max, powerPercent)
-			elseif power.value.Format == "Absolut Short" then
-				power.value:SetFormattedText("%s/%s", FormatUnitNumber(current, true), FormatUnitNumber(max, true))
-			elseif power.value.Format == "Absolut Short & Percent" then
-				power.value:SetFormattedText("%s/%s | %.1f%%", FormatUnitNumber(current, true), FormatUnitNumber(max, true), powerPercent)
-			elseif power.value.Format == "Standard" then
-				power.value:SetFormattedText("%s", current)
-			elseif power.value.Format == "Standard & Percent" then
-				power.value:SetFormattedText("%s | %.1f%%", current, powerPercent)
-			elseif power.value.Format == "Standard Short" then
-				power.value:SetFormattedText("%s", FormatUnitNumber(current, true))
-			elseif power.value.Format == "Standard Short & Percent" then
-				power.value:SetFormattedText("%s | %.1f%%", FormatUnitNumber(current, true), powerPercent)
-			else
-				power.value:SetFormattedText("%s", current)
-			end
-
-			if power.value.color == "By Class" then
-				power.value:SetTextColor(unpack(color))
-			elseif power.value.color == "Individual" then
-				power.value:SetTextColor(power.value.colorIndividual.r, power.value.colorIndividual.g, power.value.colorIndividual.b)
-			else
-				power.value:SetTextColor(unpack(color2))
-			end
-
-			local powerCurve = C_CurveUtil.CreateCurve()
-			powerCurve:SetType(Enum.LuaCurveType.Step)
-			powerCurve:AddPoint(0, power.value.ShowEmpty and 1 or 0)
-			powerCurve:AddPoint(0.001, 1)
-			powerCurve:AddPoint(0.999, 1)
-			powerCurve:AddPoint(1, power.value.ShowFull and 1 or 0)
-
-			power.value:SetAlpha(UnitPowerPercent(unit, pType, false, powerCurve))
+	if power.valueMissing.Enable == true then
+		local powerMissing = UnitPowerMissing(unit, displayType)
+		if power.valueMissing.ShortValue == true then
+			power.valueMissing:SetFormattedText("-%s", AbbreviateNumbers(powerMissing))
 		else
-			power.value:SetText("")
+			power.valueMissing:SetFormattedText("-%s", powerMissing)
 		end
 
-		if power.valuePercent.Enable == true then
-			power.valuePercent:SetFormattedText("%.1f%%", powerPercent)
-
-			if power.valuePercent.color == "By Class" then
-				power.valuePercent:SetTextColor(unpack(color))
-			elseif power.valuePercent.color == "Individual" then
-				power.valuePercent:SetTextColor(power.valuePercent.colorIndividual.r, power.valuePercent.colorIndividual.g, power.valuePercent.colorIndividual.b)
-			else
-				power.valuePercent:SetTextColor(unpack(color2))
-			end
-
-			local powerCurve = C_CurveUtil.CreateCurve()
-			powerCurve:SetType(Enum.LuaCurveType.Step)
-			powerCurve:AddPoint(0, power.valuePercent.ShowEmpty and 1 or 0)
-			powerCurve:AddPoint(0.001, 1)
-			powerCurve:AddPoint(0.999, 1)
-			powerCurve:AddPoint(1, power.valuePercent.ShowFull and 1 or 0)
-
-			power.valuePercent:SetAlpha(UnitPowerPercent(unit, pType, false, powerCurve))
-		else
-			power.valuePercent:SetText("")
-		end
-
-		if power.valueMissing.Enable == true then
-			local powerMissing = UnitPowerMissing(unit, pType)
-			if C_StringUtil and C_StringUtil.TruncateWhenZero then
-				local truncated = C_StringUtil.TruncateWhenZero(powerMissing)
-				if truncated == nil or truncated == "" then
-					power.valueMissing:SetText("")
-				elseif power.valueMissing.ShortValue == true then
-					power.valueMissing:SetFormattedText("-%s", FormatUnitNumber(powerMissing, true))
-				else
-					power.valueMissing:SetFormattedText("-%s", truncated)
-				end
-			elseif power.valueMissing.ShortValue == true then
-				power.valueMissing:SetFormattedText("-%s", FormatUnitNumber(powerMissing, true))
-			else
-				power.valueMissing:SetFormattedText("-%s", powerMissing)
-			end
-
-			if power.valueMissing.color == "By Class" then
-				power.valueMissing:SetTextColor(unpack(color))
-			elseif power.valueMissing.color == "Individual" then
-				power.valueMissing:SetTextColor(power.valueMissing.colorIndividual.r, power.valueMissing.colorIndividual.g, power.valueMissing.colorIndividual.b)
-			else
-				power.valueMissing:SetTextColor(unpack(color2))
-			end
-
-			local powerCurve = C_CurveUtil.CreateCurve()
-			powerCurve:SetType(Enum.LuaCurveType.Step)
-			powerCurve:AddPoint(0, power.valueMissing.ShowEmpty and 1 or 0)
-			powerCurve:AddPoint(0.001, 1)
-			powerCurve:AddPoint(0.999, 1)
-			powerCurve:AddPoint(1, power.valueMissing.ShowFull and 1 or 0)
-
-			power.valueMissing:SetAlpha(UnitPowerPercent(unit, pType, false, powerCurve))
-		else
-			power.valueMissing:SetText("")
-		end
+		local curve = C_CurveUtil.CreateCurve()
+		curve:SetType(Enum.LuaCurveType.Step)
+		curve:AddPoint(0, power.valueMissing.ShowEmpty and 1 or 0)
+		curve:AddPoint(0.001, 1)
+		curve:AddPoint(0.999, 1)
+		curve:AddPoint(1, power.valueMissing.ShowFull and 1 or 0)
+		power.valueMissing:SetAlpha(UnitPowerPercent(unit, displayType, false, curve))
+	else
+		power.valueMissing:SetText("")
 	end
 end
 
-local function FormatCastbarTime(self, durationObject)
-	if self.delay ~= 0 then
-			if self.Time.ShowMax == true then
-			self.Time:SetFormattedText("%.1f / %.1f |cffff0000-%.1f|r", durationObject:GetRemainingDuration(), durationObject:GetTotalDuration(), self.delay)
-			else
-			self.Time:SetFormattedText("%.1f |cffff0000-%.1f|r", durationObject:GetRemainingDuration(), self.delay)
-			end
-			else
-			if self.Time.ShowMax == true then
-			self.Time:SetFormattedText("%.1f / %.1f", durationObject:GetRemainingDuration(), durationObject:GetTotalDuration())
+local function PostUpdatePowerColor(power, unit)
+	if power.__owner.LUIArenaUnseen then
+		power:SetStatusBarColor(0.5, 0.5, 0.5)
+		power.bg:SetVertexColor(0.5, 0.5, 0.5)
+		return
+	end
+
+	local r, g, b
+	if power.color == "Individual" then
+		r, g, b = power.colorIndividual.r, power.colorIndividual.g, power.colorIndividual.b
+		power:SetStatusBarColor(r, g, b)
+	else
+		-- oUF has already selected and applied the current Blizzard color. Read
+		-- it back from the StatusBar and forward it without inspecting or doing
+		-- arithmetic on callback RGB values, which may be secret in 12.1.
+		r, g, b = power:GetStatusBarColor()
+	end
+
+	-- oUF 14.0.1 may pass secret RGB components to PostUpdateColor. Forward
+	-- those directly to Blizzard's secret-capable renderer. For dynamic colors
+	-- use the texture alpha for LUI's background multiplier instead of doing
+	-- forbidden Lua arithmetic on secret RGB values.
+	local baseAlpha = power.bg.LUIBaseAlpha or 1
+	if power.color == "Individual" then
+		power.bg:SetAlpha(baseAlpha)
+		local mu = power.bg.multiplier or 1
+		if power.bg.invert == true then
+			power.bg:SetVertexColor((1-r) * mu, (1-g) * mu, (1-b) * mu)
 		else
-			self.Time:SetFormattedText("%.1f", durationObject:GetRemainingDuration())
+			power.bg:SetVertexColor(r * mu, g * mu, b * mu)
 		end
+	else
+		power.bg:SetVertexColor(r, g, b)
+		power.bg:SetAlpha(baseAlpha * (power.bg.multiplier or 1))
+	end
+
+	SetPowerTextColor(power, power.value, unit)
+	SetPowerTextColor(power, power.valuePercent, unit)
+	SetPowerTextColor(power, power.valueMissing, unit)
+end
+
+-- oUF 14 owns the Health and Power status-bar values. LUI only formats
+-- the values passed by oUF and applies presentation in PostUpdateColor.
+local function PostUpdateHealth(health, unit, current, max, lossPerc)
+	UpdateHealthDisplay(health.__owner, unit, current, max)
+end
+
+local function PostUpdatePower(power, unit, current, min, max, displayType)
+	UpdatePowerDisplay(power.__owner, unit, current, min, max, displayType)
+
+	-- oUF's native Power element calls Show() on every update. Keep the
+	-- element active so LUI's power texts continue to receive secret-safe
+	-- updates, but hide the actual bar when it is disabled in the layout.
+	if power.LUIEnabled == false then
+		power:Hide()
 	end
 end
 
@@ -810,19 +751,25 @@ end
 --- Castbar callback after a cast starts
 ---@param castbar ufCastbar
 ---@param unit UnitId
----@param name string @ name of the spell being cast
-local function PostCastStart(castbar, unit, name)
-	local unitname, _ = UnitName(unit)
+---@param spellID number
+---@param notInterruptible boolean
+---@param name string
+local function PostCastStart(castbar, unit, spellID, notInterruptible, name)
+	local unitname = UnitName(unit)
+	if issecretvalue(unitname) then unitname = nil end
 	if castbar.Colors.Individual == true then
 		castbar:GetStatusBarTexture():SetVertexColor(castbar.Colors.Bar.r, castbar.Colors.Bar.g, castbar.Colors.Bar.b, castbar.Colors.Bar.a)
 		castbar.bg:SetVertexColor(castbar.Colors.Background.r, castbar.Colors.Background.g, castbar.Colors.Background.b, castbar.Colors.Background.a)
 		-- castbar.Backdrop:SetBackdropBorderColor(castbar.Colors.Border.r, castbar.Colors.Border.g, castbar.Colors.Border.b, castbar.Colors.Border.a)
 	else
 		if unit == "pet" then unit = "player" end
-		local pClass, pToken = UnitClass(unit)
-		local color = {LUI:GetClassColor(pToken)}
-
-		castbar:GetStatusBarTexture():SetVertexColor(color[1], color[2], color[3], 0.68)
+		local color = GetUnitClassColor(unit)
+		if color then
+			local r, g, b = color:GetRGB()
+			castbar:GetStatusBarTexture():SetVertexColor(r, g, b, 0.68)
+		else
+			castbar:GetStatusBarTexture():SetVertexColor(castbar.Colors.Bar.r, castbar.Colors.Bar.g, castbar.Colors.Bar.b, 0.68)
+		end
 		castbar.bg:SetVertexColor(0.15, 0.15, 0.15, 0.75)
 		-- castbar.Backdrop:SetBackdropBorderColor(0, 0, 0, 0.7)
 	end
@@ -851,73 +798,31 @@ local function PostCastStart(castbar, unit, name)
 	-- end
 end
 
---- Castbar callback after a cast starts
----@param castbar ufCastbar
----@param unit UnitId
----@param name string @ name of the spell being cast
-local function PostChannelStart(castbar, unit, name)
-	local _, _, _, _, startTime, endTime = UnitChannelInfo(unit)
-	if castbar.channeling then
-		if channelingTicks[name] then
-			local tickspeed = channelingTicks[name] / (1 + (UnitSpellHaste(unit) / 100))
-			local numticks = floor((castbar.max / tickspeed) + 0.5) - 1
-			for i = 1, numticks do
-				local tick = castbar:GetTick(i)
-				tick.ticktime = tickspeed * i
-				tick.delay = 0
-				tick:Update()
-			end
-			castbar.tickspeed = tickspeed
-			castbar.numticks = numticks
-		else
-			castbar:HideTicks()
+local function ShouldShowCastbar(castbar, eventUnit)
+	local owner = castbar.__owner
+	local frameUnit = owner and owner.__unit
+	if not frameUnit or frameUnit ~= eventUnit then return false end
+
+	if frameUnit ~= "player" and C_Secrets.CanCompareUnitTokens(frameUnit, "player") then
+		if UnitIsUnit(frameUnit, "player") then
+			castbar:Hide()
+			return false
 		end
 	end
 
-	PostCastStart(castbar, unit, name)
-end
-
---- Castbar callback after a cast starts
----@param castbar ufCastbar
----@param unit UnitId
----@param name string @ name of the spell being cast
-local function PostChannelUpdate(castbar, unit, name)
-	if not castbar.numticks then return end
-
-	local _, _, _, _, startTime, endTime = UnitChannelInfo(unit)
-
-	if castbar.delay < 0 then
-		castbar.numticks = castbar.numticks + 1
-
-		for i = 1, castbar.numticks do
-			local tick = castbar:GetTick(i)
-			tick.ticktime = castbar.tickspeed * i
-			tick.delay = 0
-			tick:Update()
-		end
-
-		castbar.delay = 0
-		return
-	end
-
-	local _duration = castbar.duration + castbar.delay
-	for i = 1, castbar.numticks do
-		local tick = castbar:GetTick(i)
-		if tick.ticktime < _duration then
-			tick.delay = castbar.delay
-			tick:Update()
-		else
-			break
-		end
-	end
+	return true
 end
 
 local function ThreatOverride(self, event, unit)
-	if unit ~= self.unit then return end
+	if unit ~= self.__unit then return end
 	if unit == "vehicle" then unit = "player" end
 
-	unit = unit or self.unit
+	unit = unit or self.__unit
 	local status = UnitThreatSituation(unit)
+	if issecretvalue(status) then
+		self.ThreatIndicator:Hide()
+		return
+	end
 
 	if(status and status > 0) then
 		local r, g, b = GetThreatStatusColor(status)
@@ -930,77 +835,11 @@ local function ThreatOverride(self, event, unit)
 	end
 end
 
-local function TotemsUpdate(self, elapsed)
-	self.total = elapsed + (self.total or 0)
-	if self.total >= 0.02 then
-		self.total = 0
-		local haveTotem, name, startTime, duration, totemIcon = GetTotemInfo(self.slot)
-		if (((GetTime() - startTime) == 0) or ( duration == 0 )) then
-			self:SetValue(0)
-		else
-			self:SetValue(1 - ((GetTime() - startTime) / duration))
-		end
-	end
-end
-
-local function TotemsOverride(self, event, slot)
-	if slot > MAX_TOTEMS then return end
-
-	local totem = self.Totems[slot]
-
-	local haveTotem, name, startTime, duration, totemIcon = GetTotemInfo(slot)
-
-	local color = module.colors.totems[slot]
-	local r, g, b = unpack(color)
-	totem:GetStatusBarTexture():SetVertexColor(r, g, b)
-	totem:SetValue(0)
-
-	-- Multipliers (use known color — avoid GetStatusBarColor which can be secret)
-	if (totem.bg.multiplier) then
-		local mu = totem.bg.multiplier
-		totem.bg:SetVertexColor(r*mu, g*mu, b*mu)
-	end
-
-	if(haveTotem) then
-		
-		if totem.Name then
-			totem.Name:SetText(name)
-		end
-		if(duration >= 0) then
-			totem:SetValue(1 - ((GetTime() - startTime) / duration))
-			-- Status bar update
-			totem:SetScript("OnUpdate", TotemsUpdate)
-		else
-			-- There's no need to update because it doesn't have any duration
-			totem:SetScript("OnUpdate",nil)
-			totem:SetValue(0)
-		end
-		if totemIcon then
-			totem.icon:SetTexture(totemIcon)
-		end
-	else
-		-- No totem = no time 
-		if totem.Name then
-			totem.Name:SetText(" ")
-		end
-		totem:SetValue(0)
-	end
-
-	for i = 1, MAX_TOTEMS do
-		local currTotem = self.Totems[i]
-		if GetTotemInfo(i) then
-			currTotem:Show()
-		else
-			currTotem:Hide()
-		end
-	end
-
-end
-
 local function ChiOverride(self, event, unit, powerType)
-	if self.unit ~= unit or (powerType and powerType ~= "CHI") then return end
+	if self.__unit ~= unit or (powerType and powerType ~= "CHI") then return end
 
 	 local num = UnitPower(unit, Enum.PowerType.Chi)
+	 if issecretvalue(num) then return end
 	 for i = 1, self.Chi.Force do
 		 if i <= num then
 			 self.Chi[i]:SetAlpha(1)
@@ -1011,7 +850,7 @@ local function ChiOverride(self, event, unit, powerType)
 end
 
 local function AdditionalPowerOverride(self, event, unit)
-	if not unit or not UnitIsUnit(self.unit, unit) then return end
+	if not unit or not UnitIsUnit(self.__unit, unit) then return end
 	local _, class = UnitClass(unit)
 	local additionalpower = self.AdditionalPower
 
@@ -1023,6 +862,7 @@ local function AdditionalPowerOverride(self, event, unit)
 	end
 
 	local cur, max = UnitPower('player', Enum.PowerType.Mana), UnitPowerMax('player', Enum.PowerType.Mana)
+	if issecretvalue(cur) or issecretvalue(max) then return end
 
 	additionalpower:SetMinMaxValues(0, max)
 	additionalpower:SetValue(cur)
@@ -1052,37 +892,35 @@ end
 
 local function PostUpdateAlternativePower(altpowerbar, unit, cur, min, max)
 	local color = {LUI:GetClassColor(LUI.playerClass)}
-
 	local tex, r, g, b = GetUnitPowerBarTextureInfo("player", 3)
-
-	if not tex then return end
 
 	if altpowerbar.color == "By Class" then
 		altpowerbar:GetStatusBarTexture():SetVertexColor(unpack(color))
 		r, g, b = unpack(color)
 	elseif altpowerbar.color == "Individual" then
-		r, g, b = altpowerbar.colorIndividual.r, altpowerbar.colorIndividual.g, altpowerbar.colorIndividual.b
-		altpowerbar:GetStatusBarTexture():SetVertexColor(r, g, b)
-	else
-		r = LUI:SecretSafe(r, 1)
-		g = LUI:SecretSafe(g, 1)
-		b = LUI:SecretSafe(b, 1)
+		altpowerbar:GetStatusBarTexture():SetVertexColor(altpowerbar.colorIndividual.r, altpowerbar.colorIndividual.g, altpowerbar.colorIndividual.b)
+	elseif tex then
 		altpowerbar:GetStatusBarTexture():SetVertexColor(r, g, b)
 	end
 
+	r, g, b = altpowerbar:GetStatusBarColor()
 	local mu = altpowerbar.bg.multiplier or 1
 	altpowerbar.bg:SetVertexColor(r*mu, g*mu, b*mu)
 
 	if altpowerbar.Text then
 		if altpowerbar.Text.Enable then
-			if altpowerbar.Text.ShowAlways == false and (cur == max or cur == min) then
-				altpowerbar.Text:SetText("")
-			elseif altpowerbar.Text.Format == "Absolut" then
-				altpowerbar.Text:SetFormattedText("%d/%d", cur, max)
+			if altpowerbar.Text.Format == "Absolut" then
+				altpowerbar.Text:SetFormattedText("%s/%s", cur, max)
 			elseif altpowerbar.Text.Format == "Percent" then
-				altpowerbar.Text:SetFormattedText("%.1f%%", 100 * (cur / max))
+				altpowerbar.Text:SetFormattedText("%.1f%%", UnitPowerPercent(unit, Enum.PowerType.Alternate, false, PercentCurve))
 			elseif altpowerbar.Text.Format == "Standard" then
-				altpowerbar.Text:SetFormattedText("%d", cur)
+				altpowerbar.Text:SetFormattedText("%s", cur)
+			end
+
+			if altpowerbar.Text.ShowAlways == false then
+				altpowerbar.Text:SetAlpha(UnitPowerPercent(unit, Enum.PowerType.Alternate, false, PowerActiveCurve))
+			else
+				altpowerbar.Text:SetAlpha(1)
 			end
 
 			if altpowerbar.Text.color == "By Class" then
@@ -1099,21 +937,16 @@ local function PostUpdateAlternativePower(altpowerbar, unit, cur, min, max)
 	end
 end
 
-local function PostUpdateAdditionalPower(additionalpower, unit, cur, max)
-	local _, class = UnitClass(unit)
-	class = LUI:SecretSafe(class, nil)
-	local r, g, b
-	if additionalpower.color == "By Class" and class then
-		r, g, b = LUI:GetClassColor(class)
-		additionalpower:GetStatusBarTexture():SetVertexColor(r, g, b)
+local function PostUpdateAdditionalPower(additionalpower, cur, max)
+	local _, class = UnitClass("player")
+	if additionalpower.color == "By Class" then
+		if class == nil or issecretvalue(class) then
+			additionalpower:GetStatusBarTexture():SetVertexColor(1, 1, 1)
+		else
+			additionalpower:GetStatusBarTexture():SetVertexColor(LUI:GetClassColor(class))
+		end
 	elseif additionalpower.color == "By Type" then
-		r, g, b = unpack(module.colors.power.MANA)
-		additionalpower:GetStatusBarTexture():SetVertexColor(r, g, b)
-	else
-		local safeCur = LUI:SecretSafe(cur, 0)
-		local safeMax = LUI:SecretSafe(max, 1)
-		r, g, b = oUF.ColorGradient(safeCur, safeMax, module.colors.smooth())
-		additionalpower:GetStatusBarTexture():SetVertexColor(r, g, b)
+		additionalpower:GetStatusBarTexture():SetVertexColor(unpack(module.colors.power.MANA))
 	end
 
 	local bg = additionalpower.bg
@@ -1122,23 +955,52 @@ local function PostUpdateAdditionalPower(additionalpower, unit, cur, max)
 		local mu = bg.multiplier or 1
 		bg:SetVertexColor(r * mu, g * mu, b * mu)
 	end
+
+	local text = additionalpower.value
+	if text and text.Enable then
+		local percent = UnitPowerPercent("player", ADDITIONAL_POWER_BAR_INDEX, false, PercentCurve)
+		if text.Format == "Absolut" then
+			text:SetFormattedText("%s/%s", cur, max)
+		elseif text.Format == "Percent" then
+			text:SetFormattedText("%.1f%%", percent)
+		else
+			text:SetFormattedText("%s", cur)
+		end
+
+		if text.HideIfFullMana then
+			text:SetAlpha(UnitPowerPercent("player", ADDITIONAL_POWER_BAR_INDEX, false, NotFullCurve))
+		else
+			text:SetAlpha(1)
+		end
+
+		if text.color == "By Class" and not issecretvalue(class) and class ~= nil then
+			text:SetTextColor(LUI:GetClassColor(class))
+		elseif text.color == "By Type" then
+			text:SetTextColor(unpack(module.colors.power.MANA))
+		else
+			text:SetTextColor(text.colorIndividual.r, text.colorIndividual.g, text.colorIndividual.b)
+		end
+	elseif text then
+		text:SetText("")
+	end
 end
 
 local function ArenaEnemyUnseen(self, event, unit, state)
-	if unit ~= self.unit then return end
+	if unit ~= self.__unit then return end
 
 	if state == "unseen" then
-		self.Health.Override = function(health)
+		self.LUIArenaUnseen = true
+		self.Health.PostUpdate = function(health)
 			health:SetValue(0)
-			health:GetStatusBarTexture():SetVertexColor(0.5, 0.5, 0.5, 1)
+			health:SetStatusBarColor(0.5, 0.5, 0.5)
 			health.bg:SetVertexColor(0.5, 0.5, 0.5, 1)
 			health.value:SetText(health.value.ShowDead and "|cffD7BEA5<Unseen>|r" or "")
 			health.valuePercent:SetText(health.valuePercent.ShowDead and "|cffD7BEA5<Unseen>|r" or "")
 			health.valueMissing:SetText("")
 		end
-		self.Power.Override = function(power)
+		self.Power.PostUpdate = function(power)
 			power:SetValue(0)
-			power:GetStatusBarTexture():SetVertexColor(0.5, 0.5, 0.5, 1)
+			power:SetStatusBarColor(0.5, 0.5, 0.5)
 			power.bg:SetVertexColor(0.5, 0.5, 0.5, 1)
 			power.value:SetText("")
 			power.valuePercent:SetText("")
@@ -1148,8 +1010,11 @@ local function ArenaEnemyUnseen(self, event, unit, state)
 		self.Hide = self.Show
 		self:Show()
 	else
-		self.Health.Override = OverrideHealth
-		self.Power.Override = OverridePower
+		self.LUIArenaUnseen = false
+		self.Health.PostUpdate = PostUpdateHealth
+		self.Health.PostUpdateColor = PostUpdateHealthColor
+		self.Power.PostUpdate = PostUpdatePower
+		self.Power.PostUpdateColor = PostUpdatePowerColor
 
 		self.Hide = self.Hide_
 	end
@@ -1159,9 +1024,7 @@ local function ArenaEnemyUnseen(self, event, unit, state)
 end
 
 local function PortraitOverride(self, event, unit)
-	-- UnitIsUnit can error when tokens are secret; match oUF's Private.unitIsUnit approach.
-	local okCompare, isSame = pcall(UnitIsUnit, self.unit, unit)
-	if not unit or not okCompare or not isSame then return end
+	if not unit or not UnitIsUnit(self.__unit, unit) then return end
 
 	local portrait = self.Portrait
 	local portrait2D = self.Portrait2D
@@ -1229,6 +1092,7 @@ end
 local function Reposition(V2Tex)
 	local to = V2Tex.to
 	local from = V2Tex.from
+	if not to or not from then return end
 
 	local toL, toR = to:GetLeft(), to:GetRight()
 	local toT, toB = to:GetTop(), to:GetBottom()
@@ -1405,17 +1269,43 @@ module.funcs = {
 		
 
 		self.Health.bg:SetTexture(Media:Fetch("statusbar", oufdb.HealthBar.TextureBG))
+		self.Health.bg.LUIBaseAlpha = oufdb.HealthBar.BGAlpha
 		self.Health.bg:SetAlpha(oufdb.HealthBar.BGAlpha)
 		self.Health.bg.multiplier = oufdb.HealthBar.BGMultiplier
 		self.Health.bg.invert = oufdb.HealthBar.BGInvert
 
-		self.Health.colorTapping = (unit == "target") and oufdb.HealthBar.Tapping or false
-		self.Health.colorDisconnected = false
-		self.Health.color = oufdb.HealthBar.Color
+		local colorMode = oufdb.HealthBar.Color
+		local tapping = (unit == "target") and oufdb.HealthBar.Tapping or false
+
+		self.Health.color = colorMode
 		self.Health.colorIndividual = oufdb.HealthBar.IndividualColor
-		self.Health.Smooth = oufdb.HealthBar.Smooth
-		self.Health.colorReaction = false
+		self.Health.colorDisconnected = false
+		self.Health.colorThreat = false
+		self.Health.colorSelection = false
+		self.Health.colorClass = colorMode == "By Class"
+		self.Health.colorClassNPC = false
+		self.Health.colorClassPet = false
+		self.Health.colorSmooth = colorMode == "Gradient"
+		self.Health.colorHealth = false
+		self.Health.smoothing = BarInterpolation(oufdb.HealthBar.Smooth)
 		self.Health.frequentUpdates = true
+
+		if self.Health.SetColorTapping then
+			self.Health:SetColorTapping(tapping)
+		else
+			self.Health.colorTapping = tapping
+		end
+
+		local reaction = colorMode == "By Class"
+		if self.Health.SetColorReaction then
+			self.Health:SetColorReaction(reaction)
+		else
+			self.Health.colorReaction = reaction
+		end
+
+		if colorMode == "Individual" then
+			self.Health:SetStatusBarColor(oufdb.HealthBar.IndividualColor.r, oufdb.HealthBar.IndividualColor.g, oufdb.HealthBar.IndividualColor.b)
+		end
 	end,
 	Power = function(self, unit, oufdb)
 		if not self.Power then
@@ -1438,20 +1328,37 @@ module.funcs = {
 		end
 
 		self.Power.bg:SetTexture(Media:Fetch("statusbar", oufdb.PowerBar.TextureBG))
+		self.Power.bg.LUIBaseAlpha = oufdb.PowerBar.BGAlpha
 		self.Power.bg:SetAlpha(oufdb.PowerBar.BGAlpha)
 		self.Power.bg.multiplier = oufdb.PowerBar.BGMultiplier
 		self.Power.bg.invert = oufdb.PowerBar.BGInvert
 
+		local colorMode = oufdb.PowerBar.Color
+		self.Power.color = colorMode
+		self.Power.UpdateColor = colorMode == "By Class" and UpdatePowerClassOrType or nil
+		self.Power.colorIndividual = oufdb.PowerBar.IndividualColor
 		self.Power.colorTapping = false
 		self.Power.colorDisconnected = false
-		self.Power.colorSmooth = false
-		self.Power.color = oufdb.PowerBar.Color
-		self.Power.colorIndividual = oufdb.PowerBar.IndividualColor
-		self.Power.Smooth = oufdb.PowerBar.Smooth
+		self.Power.colorThreat = false
+		self.Power.colorSelection = false
 		self.Power.colorReaction = false
+		self.Power.colorPower = colorMode == "By Type"
+		self.Power.colorPowerSmooth = false
+		self.Power.colorClass = colorMode == "By Class"
+		self.Power.colorClassNPC = false
+		self.Power.colorClassPet = false
+		self.Power.displayAltPower = true
+		self.Power.displayAltPowerOnly = false
+		self.Power.GetDisplayPower = GetPrimaryPower
+		self.Power.smoothing = BarInterpolation(oufdb.PowerBar.Smooth)
 		self.Power.frequentUpdates = true
+		self.Power.LUIEnabled = oufdb.PowerBar.Enable == true
 
-		if oufdb.PowerBar.Enable == true then
+		if colorMode == "Individual" then
+			self.Power:SetStatusBarColor(oufdb.PowerBar.IndividualColor.r, oufdb.PowerBar.IndividualColor.g, oufdb.PowerBar.IndividualColor.b)
+		end
+
+		if self.Power.LUIEnabled then
 			self.Power:Show()
 		else
 			self.Power:Hide()
@@ -1674,7 +1581,8 @@ module.funcs = {
 			if unit == "player" then
 				self.PvPIndicator.Timer = SetFontString(self.Overlay, Media:Fetch("font", oufdb.PvPText.Font), oufdb.PvPText.Size, oufdb.PvPText.Outline)
 				self.Health:HookScript("OnUpdate", function(_, elapsed)
-					if UnitIsPVP(unit) and oufdb.PvPIndicator.Enable and oufdb.PvPText.Enable then
+					local isPVP = UnitIsPVP(unit)
+					if not issecretvalue(isPVP) and isPVP and oufdb.PvPIndicator.Enable and oufdb.PvPText.Enable then
 						if (GetPVPTimer() == 301000 or GetPVPTimer() == -1) then
 							if self.PvPIndicator.Timer:IsShown() then
 								self.PvPIndicator.Timer:Hide()
@@ -1787,12 +1695,16 @@ module.funcs = {
 		if not self.Totems then
 			self.Totems = CreateFrame("Frame", nil, self)
 			self.Totems:SetFrameLevel(6)
+			local priorities = UnitClassBase("player") == "SHAMAN"
+				and _G.SHAMAN_TOTEM_PRIORITIES
+				or _G.STANDARD_TOTEM_PRIORITIES
 
 			for i = 1, MAX_TOTEMS do
 				local bar = CreateFrame("StatusBar", nil, self.Totems, "BackdropTemplate")
 				bar:SetBackdrop(backdrop)
 				bar:SetBackdropColor(0, 0, 0)
 				bar:SetMinMaxValues(0, 1)
+				bar:SetValue(1)
 				bar.slot = i
 
 				bar.bg = bar:CreateTexture(nil, "BORDER")
@@ -1802,13 +1714,26 @@ module.funcs = {
 				bar.icon = bar:CreateTexture(nil, "OVERLAY")
 				bar.icon:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT")
 				bar.icon:SetSize(oufdb.TotemsBar.Height * oufdb.TotemsBar.IconScale, oufdb.TotemsBar.Height * oufdb.TotemsBar.IconScale)
+				bar.Icon = bar.icon
+
+				local cooldown = CreateFrame("Cooldown", nil, bar, "CooldownFrameTemplate")
+				cooldown:SetAllPoints(bar)
+				cooldown:SetHideCountdownNumbers(false)
+				bar.Cooldown = cooldown
 
 				local btn = CreateFrame("Button", nil, bar, "SecureActionButtonTemplate")
 				btn:RegisterForClicks("AnyUp")
 				btn:SetAllPoints(bar)
 				btn:SetAttribute("unit", "player")
 				btn:SetAttribute("type", "destroytotem")
-				btn:SetAttribute("totem-slot", i)
+				local slot = i
+				for candidate = 1, MAX_TOTEMS do
+					if priorities[candidate] == i then
+						slot = candidate
+						break
+					end
+				end
+				btn:SetAttribute("totem-slot", slot)
 
 				self.Totems[i] = bar
 				self.Totems[i].btn = btn
@@ -1825,8 +1750,6 @@ module.funcs = {
 			})
 			self.Totems.FrameBackdrop:SetBackdropColor(0, 0, 0, 0)
 			self.Totems.FrameBackdrop:SetBackdropBorderColor(0, 0, 0)
-
-			--self.Totems.Override = TotemsOverride
 		end
 
 		local x = oufdb.TotemsBar.Lock and 0 or oufdb.TotemsBar.X
@@ -1856,60 +1779,28 @@ module.funcs = {
 		end
 	end,
 	ClassPower = function(self, unit, oufdb)
-		local BASE_COUNT = {
-			MAGE = 4,
-			MONK = 5,
-			PALADIN = 5,
-			ROGUE = 5,
-			WARLOCK = 5,
-			DRUID = 5,
-			EVOKER = 5,
-			DEFAULT = 5,
-		}
-		-- The maximum of a ressource a given class can have
-		local MAX_COUNT = {
-			MAGE = 4,
-			MONK = 6,
-			PALADIN = 5,
-			ROGUE = 7,
-			WARLOCK = 5,
-			DRUID = 5,
-			EVOKER = 6,
-			DEFAULT = 5,
-		}
-		local r, g, b
-		if LUI.MONK then r, g, b = unpack(module.colors.chibar[1])
-		elseif LUI.PALADIN then r, g, b = unpack(module.colors.holypowerbar[1])
-		elseif LUI.MAGE then r, g, b = unpack(module.colors.arcanechargesbar[1])
-		elseif LUI.WARLOCK then r, g, b = unpack(module.colors.warlockbar.Shard1)
-		else r, g, b = unpack(module.colors.combopoints[1])
-		end
-		
 		local classPower = self.ClassPower
 		if not classPower then
 			classPower = CreateFrame("Frame", nil, self, "BackdropTemplate")
-			-- classPower:SetFrameLevel(6)
 			classPower:SetFrameStrata("BACKGROUND")
 			classPower:SetBackdrop({
 				bgFile = "Interface/Tooltips/UI-Tooltip-Background",
 				edgeFile = glowTex, tile = false, tileSize = 0, edgeSize = 1,
 			})
-			classPower:SetBackdropColor(r * 0.35, g * 0.35, b * 0.35)
 			classPower:SetBackdropBorderColor(0, 0, 0)
-			classPower.bg = classPower:CreateTexture(nil, "BACKGROUND")
-			classPower.bg:SetTexture(Media:Fetch("statusbar", oufdb.ClassPowerBar.Texture))
-
 			classPower.multiplier = 0.35
-			classPower.Count = BASE_COUNT[LUI.playerClass] or BASE_COUNT.DEFAULT
-			classPower.MaxCount = MAX_COUNT[LUI.playerClass] or MAX_COUNT.DEFAULT
-
-			for i = 1, classPower.MaxCount do -- Always create frames for the max possible
-				classPower[i] = CreateFrame("StatusBar", nil, classPower, "BackdropTemplate")
-				classPower[i]:SetBackdrop(backdrop)
-				classPower[i]:SetBackdropColor(0.08, 0.08, 0.08)
-			end
-
+			classPower.Count = 1
 			self.ClassPower = classPower
+		end
+
+		classPower.MaxCount = MAX_CLASS_POWER_POINTS
+		for i = #classPower + 1, classPower.MaxCount do
+			local classPoint = CreateFrame("StatusBar", nil, classPower, "BackdropTemplate")
+			classPoint:SetBackdrop(backdrop)
+			classPoint:SetBackdropColor(0.08, 0.08, 0.08)
+			classPoint:SetMinMaxValues(0, 1)
+			classPoint:SetValue(0)
+			classPower[i] = classPoint
 		end
 
 		local x = oufdb.ClassPowerBar.Lock and 0 or oufdb.ClassPowerBar.X
@@ -1919,59 +1810,43 @@ module.funcs = {
 		classPower:SetWidth(oufdb.ClassPowerBar.Width)
 		classPower:ClearAllPoints()
 		classPower:SetPoint("BOTTOMLEFT", self, "TOPLEFT", x, y)
-	
-		local function checkPowers(event, level)
-			local pLevel = (event == "UNIT_LEVEL") and tonumber(level) or UnitLevel("player")
-			local count = BASE_COUNT[LUI.playerClass]
-			if LUI.EVOKER then 
-				if module:GetTalentRank(EVOKER_DPS_POWER_NEXUS_NODE) then
-					count = 6
-				elseif module:GetTalentRank(EVOKER_AUG_POWER_NEXUS_NODE) then
-					count = 6
-				elseif module:GetTalentRank(EVOKER_HEAL_POWER_NEXUS_NODE) then
-					count = 6
-				end
-			elseif LUI.MONK and module:GetTalentRank(MONK_ASCENSION_NODE) then
-				count = 6
-			elseif LUI.ROGUE then
-				if module:GetTalentRank(ROGUE_SECRET_STRATEGEM_NODE) then
-					count = count + 1
-				end
-				if module:GetTalentRank(ROGUE_DEEPER_STRATAGEM_NODE, ROGUE_DEEPER_STRATAGEM_ENTRY) then
-					count = count + 1
-				end
-			end
-			classPower.Count = count
 
-			for i = 1, classPower.MaxCount do
-				local classPoint = classPower[i] ---@type StatusBar
-				if oufdb.ClassPowerBar.Texture == "Empty" then
-					classPoint:GetStatusBarTexture():SetVertexColor(r, g, b)
-				else
-					classPoint:SetStatusBarTexture(Media:Fetch("statusbar", oufdb.ClassPowerBar.Texture))
-					classPoint:GetStatusBarTexture():SetVertexColor(r, g, b)
-				end
-				classPoint:SetSize(((oufdb.ClassPowerBar.Width - 2*oufdb.ClassPowerBar.Padding) / classPower.Count), oufdb.ClassPowerBar.Height)
+		local function UpdateClassPowerLayout(element, count)
+			count = math.max(1, math.min(count or element.Count or 1, element.MaxCount))
+			element.Count = count
+			local padding = oufdb.ClassPowerBar.Padding
+			local pointWidth = math.max(1, (oufdb.ClassPowerBar.Width - (count - 1) * padding) / count)
+
+			for i = 1, element.MaxCount do
+				local classPoint = element[i] ---@type StatusBar
+				classPoint:SetStatusBarTexture(Media:Fetch("statusbar", oufdb.ClassPowerBar.Texture))
+				classPoint:SetSize(pointWidth, oufdb.ClassPowerBar.Height)
 				classPoint:ClearAllPoints()
 				if i == 1 then
-					classPoint:SetPoint("LEFT", classPower, "LEFT", 0, 0)
+					classPoint:SetPoint("LEFT", element, "LEFT", 0, 0)
 				else
-					classPoint:SetPoint("LEFT", classPower[i-1], "RIGHT", oufdb.ClassPowerBar.Padding, 0)
+					classPoint:SetPoint("LEFT", element[i-1], "RIGHT", padding, 0)
 				end
-				--LUI:Print("ClassIcon["..i.."] Is Shown")
-				--classPoint:Show()
-				if i > classPower.Count then
-					classPoint:Hide()
-				end
+				classPoint:SetShown(i <= count)
 			end
 		end
-		checkPowers()
 
-		module:RegisterEvent("UNIT_LEVEL", checkPowers)
-		module:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", checkPowers)
-		module:RegisterEvent("PLAYER_TALENT_UPDATE", checkPowers)
-		module:RegisterEvent("TRAIT_CONFIG_UPDATED", checkPowers)
-		classPower.UpdateTexture = checkPowers
+		function classPower:UpdateBackdropColor(color)
+			color = color or self.LUIColor or module.colors.class[LUI.playerClass]
+			self.LUIColor = color
+			local r, g, b = color:GetRGB()
+			self:SetBackdropColor(r * self.multiplier, g * self.multiplier, b * self.multiplier)
+		end
+
+		classPower.UpdateTexture = UpdateClassPowerLayout
+		classPower.PostUpdate = function(element, current, max, hasCurrentChanged, hasMaxChanged)
+			if max and max > 0 and (hasMaxChanged or element.Count ~= max) then
+				element:UpdateTexture(max)
+			end
+		end
+		classPower.PostUpdateColor = function(element, color)
+			if color then element:UpdateBackdropColor(color) end
+		end
 
 		function self.ClassPower.PostVisibility(element, enabled)
 			if enabled then
@@ -1980,7 +1855,10 @@ module.funcs = {
 				self.ClassPower:Hide()
 			end
 		end
-		
+
+		classPower:UpdateBackdropColor()
+		classPower:UpdateTexture(classPower.Count)
+		if classPower.ForceUpdate then classPower:ForceUpdate() end
 	end,
 	AlternativePower = function(self, unit, oufdb)
 		if not self.AlternativePower then
@@ -2032,7 +1910,7 @@ module.funcs = {
 		self.AlternativePower.bg:SetAlpha(module.db.profile.player.AlternativePowerBar.BGAlpha)
 		self.AlternativePower.bg.multiplier = module.db.profile.player.AlternativePowerBar.BGMultiplier
 
-		self.AlternativePower.Smooth = module.db.profile.player.AlternativePowerBar.Smooth
+		self.AlternativePower.smoothing = BarInterpolation(module.db.profile.player.AlternativePowerBar.Smooth)
 		self.AlternativePower.color = module.db.profile.player.AlternativePowerBar.Color
 		self.AlternativePower.colorIndividual = module.db.profile.player.AlternativePowerBar.IndividualColor
 		
@@ -2051,7 +1929,7 @@ module.funcs = {
 			self.AlternativePower.Text:Hide()
 		end
 
-		-- self.AlternativePower.PostUpdate = PostUpdateAlternativePower
+		self.AlternativePower.PostUpdate = PostUpdateAlternativePower
 
 		self.AlternativePower.SetPosition()
 	end,
@@ -2065,19 +1943,22 @@ module.funcs = {
 			self.AdditionalPower = AdditionalPower
 			self.AdditionalPower.bg = bg
 
-			self.AdditionalPower.Smooth = oufdb.AdditionalPowerBar.Smooth
+			self.AdditionalPower.smoothing = BarInterpolation(oufdb.AdditionalPowerBar.Smooth)
 
 			self.AdditionalPower.value = SetFontString(self.AdditionalPower, Media:Fetch("font", oufdb.AdditionalPowerText.Font), oufdb.AdditionalPowerText.Size, oufdb.AdditionalPowerText.Outline)
-			self:Tag(self.AdditionalPower.value, "[additionalpower2]")
 			
 			self.AdditionalPower.ShouldEnable = function(unit)
 				local shouldEnable = false
 				local _, playerClass = UnitClass(unit)
+				if playerClass == nil or issecretvalue(playerClass) then return false end
 				if(not UnitHasVehicleUI('player')) then
-					if(UnitPowerMax(unit, ADDITIONAL_POWER_BAR_INDEX) ~= 0) then
+					local maxPower = UnitPowerMax(unit, ADDITIONAL_POWER_BAR_INDEX)
+					if not issecretvalue(maxPower) and maxPower ~= 0 then
 						if LUI.IsRetail and (ALT_POWER_BAR_PAIR_DISPLAY_INFO[playerClass]) then
 							local powerType = UnitPowerType(unit)
-							shouldEnable = ALT_POWER_BAR_PAIR_DISPLAY_INFO[playerClass][powerType]
+							if powerType ~= nil and not issecretvalue(powerType) then
+								shouldEnable = ALT_POWER_BAR_PAIR_DISPLAY_INFO[playerClass][powerType]
+							end
 						end
 					end
 				end
@@ -2099,8 +1980,7 @@ module.funcs = {
 			self.AdditionalPower:SetScript("OnShow", self.AdditionalPower.SetPosition)
 			self.AdditionalPower:SetScript("OnHide", self.AdditionalPower.SetPosition)
 
-			-- self.AdditionalPower.PostUpdatePower = PostUpdateAdditionalPower
-			--self.AdditionalPower.Override = AdditionalPowerOverride
+			self.AdditionalPower.PostUpdate = PostUpdateAdditionalPower
 		end
 
 		self.AdditionalPower:ClearAllPoints()
@@ -2117,7 +1997,8 @@ module.funcs = {
 		self.AdditionalPower:SetStatusBarTexture(Media:Fetch("statusbar", oufdb.AdditionalPowerBar.Texture))
 
 		self.AdditionalPower.value:SetFont(Media:Fetch("font", oufdb.AdditionalPowerText.Font), oufdb.AdditionalPowerText.Size, oufdb.AdditionalPowerText.Outline)
-		self.AdditionalPower.value:SetPoint("CENTER", self.AdditionalPower, "CENTER")
+		self.AdditionalPower.value:ClearAllPoints()
+		self.AdditionalPower.value:SetPoint(oufdb.AdditionalPowerText.Point, self.AdditionalPower, oufdb.AdditionalPowerText.RelativePoint, oufdb.AdditionalPowerText.X, oufdb.AdditionalPowerText.Y)
 
 		if oufdb.AdditionalPowerText.Enable == true then
 			self.AdditionalPower.value:Show()
@@ -2126,6 +2007,13 @@ module.funcs = {
 		end
 
 		self.AdditionalPower.color = oufdb.AdditionalPowerBar.Color
+		self.AdditionalPower.colorPower = oufdb.AdditionalPowerBar.Color == "By Type" or oufdb.AdditionalPowerBar.Color == "Gradient"
+		self.AdditionalPower.colorPowerSmooth = oufdb.AdditionalPowerBar.Color == "Gradient"
+		self.AdditionalPower.value.Enable = oufdb.AdditionalPowerText.Enable
+		self.AdditionalPower.value.Format = oufdb.AdditionalPowerText.Format
+		self.AdditionalPower.value.HideIfFullMana = oufdb.AdditionalPowerText.HideIfFullMana
+		self.AdditionalPower.value.color = oufdb.AdditionalPowerText.Color
+		self.AdditionalPower.value.colorIndividual = oufdb.AdditionalPowerText.IndividualColor
 
 		self.AdditionalPower.bg:SetTexture(Media:Fetch("statusbar", oufdb.AdditionalPowerBar.TextureBG))
 		self.AdditionalPower.bg:SetAlpha(oufdb.AdditionalPowerBar.BGAlpha)
@@ -2331,6 +2219,8 @@ module.funcs = {
 		self.CombatFeedbackText:ClearAllPoints()
 		self.CombatFeedbackText:SetPoint(oufdb.CombatFeedback.Point, self, oufdb.CombatFeedback.RelativePoint, oufdb.CombatFeedback.X, oufdb.CombatFeedback.Y)
 		self.CombatFeedbackText.colors = module.colors.CombatText
+		self.CombatFeedbackText.origHeight = oufdb.CombatFeedback.Size
+		self.CombatFeedbackText.maxAlpha = oufdb.CombatFeedback.MaxAlpha
 
 		if oufdb.CombatFeedback.Enable == true then
 			self.CombatFeedbackText.ignoreImmune = not oufdb.CombatFeedback.ShowImmune
@@ -2350,7 +2240,7 @@ module.funcs = {
 
 	Castbar = function(self, unit, oufdb)
 		-- Castbars are not supported for *target units as they do not have any event-driven updates.
-		if unit:match(".+target$") then return end
+		if not unit or unit:match(".+target$") then return end
 
 		local castbar = self.Castbar
 		if not castbar then
@@ -2361,65 +2251,35 @@ module.funcs = {
 			castbar.bg = castbar:CreateTexture(nil, "BORDER")
 			castbar.bg:SetAllPoints(castbar)
 
-			-- castbar.Backdrop = CreateFrame("Frame", nil, self, "BackdropTemplate")
-			-- castbar.Backdrop:SetPoint("TOPLEFT", castbar, "TOPLEFT", -4, 3)
-			-- castbar.Backdrop:SetPoint("BOTTOMRIGHT", castbar, "BOTTOMRIGHT", 3, -3.5)
-			-- castbar.Backdrop:SetParent(castbar)
+			castbar.Backdrop = CreateFrame("Frame", nil, castbar, "BackdropTemplate")
+			castbar.Backdrop:SetPoint("TOPLEFT", castbar, "TOPLEFT", -4, 4)
+			castbar.Backdrop:SetPoint("BOTTOMRIGHT", castbar, "BOTTOMRIGHT", 4, -4)
+			castbar.Backdrop:SetFrameLevel(math.max(castbar:GetFrameLevel() - 1, 0))
+
+			-- oUF applies the secret not-interruptible state through
+			-- SetAlphaFromBoolean. The shield frame is therefore styled here but
+			-- its visibility remains controlled by Blizzard/oUF.
+			castbar.Shield = CreateFrame("Frame", nil, castbar, "BackdropTemplate")
+			castbar.Shield:SetAllPoints(castbar)
+			castbar.Shield:SetFrameLevel(castbar:GetFrameLevel() + 1)
+			castbar.Shield.Fill = castbar.Shield:CreateTexture(nil, "ARTWORK")
+			castbar.Shield.Fill:SetAllPoints(castbar.Shield)
+			castbar.Shield.Label = SetFontString(castbar.Shield, Media:Fetch("font", oufdb.Castbar.NameText.Font), oufdb.Castbar.NameText.Size)
+			castbar.Shield.Label:SetPoint("CENTER", castbar.Shield, "CENTER", 0, 0)
+			castbar.Shield.Label:SetText("** Shielded **")
+			castbar.Shield:SetAlpha(0)
 
 			castbar.Time = SetFontString(castbar, Media:Fetch("font", oufdb.Castbar.TimeText.Font), oufdb.Castbar.TimeText.Size)
 			castbar.Time:SetJustifyH("RIGHT")
-			castbar.CustomTimeText = FormatCastbarTime
-			castbar.CustomDelayText = FormatCastbarTime
+			castbar.Time.formatter = CastbarSecondsFormatter
 
 			castbar.Text = SetFontString(castbar, Media:Fetch("font", oufdb.Castbar.NameText.Font), oufdb.Castbar.NameText.Size)
 
 			castbar.PostCastStart = PostCastStart
-			castbar.PostChannelStart = PostCastStart
 
 			if unit == "player" then
 				castbar.SafeZone = castbar:CreateTexture(nil, "ARTWORK")
 				castbar.SafeZone:SetTexture(normTex)
-
-				if channelingTicks then -- make sure player is a class that has a channeled spell
-					local ticks = {}
-					local function updateTick(self)
-						local ticktime = self.ticktime - self.delay
-						if ticktime > 0 and ticktime < castbar.max then
-							self:SetPoint("CENTER", castbar, "LEFT", ticktime / castbar.max * castbar:GetWidth(), 0)
-							self:Show()
-						else
-							self:Hide()
-							self.ticktime = 0
-							self.delay = 0
-						end
-					end
-
-					castbar.GetTick = function(self, i)
-						local tick = ticks[i]
-						if not tick then
-							tick = self:CreateTexture(nil, "OVERLAY")
-							ticks[i] = tick
-							tick:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
-							tick:SetVertexColor(1, 1, 1, 0.8)
-							tick:SetBlendMode("ADD")
-							tick:SetWidth(15)
-							tick.Update = updateTick
-						end
-						tick:SetHeight(self:GetHeight() * 1.8)
-						return tick
-					end
-					castbar.HideTicks = function(self)
-						for i, tick in ipairs(ticks) do
-							tick:Hide()
-							tick.ticktime = 0
-							tick.delay = 0
-						end
-					end
-
-					castbar.PostChannelStart = PostChannelStart
-					castbar.PostChannelUpdate = PostChannelUpdate
-					castbar.PostChannelStop = castbar.HideTicks
-				end
 			end
 
 			castbar.Icon = castbar:CreateTexture(nil, "ARTWORK")
@@ -2432,7 +2292,7 @@ module.funcs = {
 				castbar.Icon = castbar:CreateTexture(nil, "ARTWORK")
 				castbar.Icon:SetHeight(20)
 				castbar.Icon:SetWidth(20)
-				if unit == unit:match("arena%d") then
+				if unit:match("^arena%d*$") then
 					castbar.Icon:SetPoint("RIGHT", 30, 0)
 				else
 					castbar.Icon:SetPoint("LEFT", -30, 0)
@@ -2455,6 +2315,7 @@ module.funcs = {
 			-- castbar.IconBackdrop:SetBackdropColor(0, 0, 0, 0)
 			-- castbar.IconBackdrop:SetBackdropBorderColor(0, 0, 0, 0.7)
 		end
+		castbar.ShouldShow = ShouldShowCastbar
 
 		castbar:SetStatusBarTexture(Media:Fetch("statusbar", oufdb.Castbar.General.Texture))
 		castbar:SetHeight(oufdb.Castbar.General.Height)
@@ -2464,7 +2325,7 @@ module.funcs = {
 			castbar:SetPoint(oufdb.Castbar.General.Point, UIParent, oufdb.Castbar.General.Point, oufdb.Castbar.General.X, oufdb.Castbar.General.Y)
 		elseif unit == "focus" or unit == "pet" then
 			castbar:SetPoint("TOP", self, "BOTTOM", oufdb.Castbar.General.X, oufdb.Castbar.General.Y)
-		elseif unit == unit:match("arena%d") then
+		elseif unit:match("^arena%d*$") then
 			castbar:SetPoint("RIGHT", self, "LEFT", oufdb.Castbar.General.X, oufdb.Castbar.General.Y)
 		else
 			castbar:SetPoint("LEFT", self, "RIGHT", oufdb.Castbar.General.X, oufdb.Castbar.General.Y)
@@ -2472,17 +2333,42 @@ module.funcs = {
 
 		castbar.bg:SetTexture(Media:Fetch("statusbar", oufdb.Castbar.General.TextureBG))
 
-		-- castbar.Backdrop:SetBackdrop({
-		-- 	edgeFile = Media:Fetch("border", oufdb.Castbar.Border.Texture),
-		-- 	edgeSize = oufdb.Castbar.Border.Thickness,
-		-- 	insets = {
-		-- 		left = oufdb.Castbar.Border.Inset.left,
-		-- 		right = oufdb.Castbar.Border.Inset.right,
-		-- 		top = oufdb.Castbar.Border.Inset.top,
-		-- 		bottom = oufdb.Castbar.Border.Inset.bottom
-		-- 	}
-		-- })
-		-- castbar.Backdrop:SetBackdropColor(0, 0, 0, 0)
+		castbar.Backdrop:SetBackdrop({
+			edgeFile = Media:Fetch("border", oufdb.Castbar.Border.Texture),
+			edgeSize = oufdb.Castbar.Border.Thickness,
+			insets = {
+				left = oufdb.Castbar.Border.Inset.left,
+				right = oufdb.Castbar.Border.Inset.right,
+				top = oufdb.Castbar.Border.Inset.top,
+				bottom = oufdb.Castbar.Border.Inset.bottom
+			}
+		})
+		castbar.Backdrop:SetBackdropColor(0, 0, 0, 0)
+		castbar.Backdrop:SetBackdropBorderColor(oufdb.Castbar.Colors.Border.r, oufdb.Castbar.Colors.Border.g, oufdb.Castbar.Colors.Border.b, oufdb.Castbar.Colors.Border.a)
+
+		local shieldColor = oufdb.Castbar.Shield.IndividualColor and oufdb.Castbar.Shield.BarColor or oufdb.Castbar.Colors.Shield
+		local shieldBorderColor = oufdb.Castbar.Shield.IndividualBorder and oufdb.Castbar.Shield.Color or oufdb.Castbar.Colors.Border
+		castbar.Shield.Fill:SetColorTexture(shieldColor.r, shieldColor.g, shieldColor.b, shieldColor.a)
+		castbar.Shield:SetBackdrop({
+			edgeFile = Media:Fetch("border", oufdb.Castbar.Shield.Texture),
+			edgeSize = oufdb.Castbar.Shield.Thickness,
+			insets = {
+				left = oufdb.Castbar.Shield.Inset.left,
+				right = oufdb.Castbar.Shield.Inset.right,
+				top = oufdb.Castbar.Shield.Inset.top,
+				bottom = oufdb.Castbar.Shield.Inset.bottom
+			}
+		})
+		castbar.Shield:SetBackdropColor(0, 0, 0, 0)
+		if oufdb.Castbar.Shield.Border then
+			castbar.Shield:SetBackdropBorderColor(shieldBorderColor.r, shieldBorderColor.g, shieldBorderColor.b, shieldBorderColor.a)
+		else
+			castbar.Shield:SetBackdropBorderColor(0, 0, 0, 0)
+		end
+		castbar.Shield.Label:SetFont(Media:Fetch("font", oufdb.Castbar.NameText.Font), oufdb.Castbar.NameText.Size, oufdb.Castbar.NameText.Outline)
+		castbar.Shield.Label:SetTextColor(oufdb.Castbar.Colors.Name.r, oufdb.Castbar.Colors.Name.g, oufdb.Castbar.Colors.Name.b)
+		castbar.Shield.Label:SetShown(oufdb.Castbar.Shield.Text == true)
+		castbar.Shield:SetShown(oufdb.Castbar.General.Shield == true and oufdb.Castbar.Shield.Enable == true)
 
 		castbar.Colors = {
 			Individual = oufdb.Castbar.General.IndividualColor,
@@ -2491,11 +2377,11 @@ module.funcs = {
 			Border = oufdb.Castbar.Colors.Border,
 		}
 		castbar.Shielded = {
-			Enable = oufdb.Castbar.General.Shield,
+			Enable = oufdb.Castbar.General.Shield and oufdb.Castbar.Shield.Enable,
 			IndividualColor = oufdb.Castbar.Shield.IndividualColor,
 			BarColor = oufdb.Castbar.Shield.BarColor,
 			IndividualBorder = oufdb.Castbar.Shield.IndividualBorder,
-			--Text = oufdb.Castbar.Shield.Text,
+			Text = oufdb.Castbar.Shield.Text,
 			Color = oufdb.Castbar.Shield.Color,
 			Texture = oufdb.Castbar.Shield.Texture,
 			Thick = oufdb.Castbar.Shield.Thickness,
@@ -2521,7 +2407,15 @@ module.funcs = {
 		castbar.Text:SetFont(Media:Fetch("font", oufdb.Castbar.NameText.Font), oufdb.Castbar.NameText.Size)
 		castbar.Text:ClearAllPoints()
 		castbar.Text:SetPoint("LEFT", castbar, "LEFT", oufdb.Castbar.NameText.OffsetX, oufdb.Castbar.NameText.OffsetY)
-		castbar.Text:SetTextColor(oufdb.Castbar.Colors.Name.r, oufdb.Castbar.Colors.Name.r, oufdb.Castbar.Colors.Name.r)
+		if oufdb.Castbar.Shield.Text == true and oufdb.Castbar.General.Shield == true and oufdb.Castbar.Shield.Enable == true then
+			castbar.Text:SetPoint("RIGHT", castbar.Shield.Label, "LEFT", -6, oufdb.Castbar.NameText.OffsetY)
+		elseif oufdb.Castbar.TimeText.Enable == true then
+			castbar.Text:SetPoint("RIGHT", castbar.Time, "LEFT", -6, oufdb.Castbar.NameText.OffsetY)
+		else
+			castbar.Text:SetPoint("RIGHT", castbar, "RIGHT", -5, oufdb.Castbar.NameText.OffsetY)
+		end
+		castbar.Text:SetWordWrap(false)
+		castbar.Text:SetTextColor(oufdb.Castbar.Colors.Name.r, oufdb.Castbar.Colors.Name.g, oufdb.Castbar.Colors.Name.b)
 
 		if oufdb.Castbar.NameText.Enable == true then
 			castbar.Text:Show()
@@ -2604,50 +2498,70 @@ module.funcs = {
 		self.ThreatIndicator[8]:SetPoint("TOPRIGHT", self.ThreatIndicator[2], "BOTTOMRIGHT")
 		self.ThreatIndicator[8]:SetPoint("BOTTOMRIGHT", self.ThreatIndicator[4], "TOPRIGHT")
 
-		--self.ThreatIndicator.Override = ThreatOverride
+		self.ThreatIndicator.PostUpdate = function(element, updatedUnit, status, color)
+			if not color then return end
+			local r, g, b = color:GetRGB()
+			for i = 1, 8 do
+				element[i]:SetVertexColor(r, g, b)
+			end
+		end
 	end,
 
 	HealthPrediction = function(self, unit, oufdb)
-		if not self.HealthPrediction then
-			self.HealthPrediction = {
-				myBar = CreateFrame("StatusBar", nil, self.Health),
-				otherBar = CreateFrame("StatusBar", nil, self.Health),
-				maxOverflow = 1,
-			}
+		local db = oufdb.HealthPredictionBar
+		local health = self.Health
+		if not db.Enable then
+			if health.HealingPlayer then health.HealingPlayer:SetAlpha(0) end
+			if health.HealingOther then health.HealingOther:SetAlpha(0) end
+			return
 		end
 
-		self.HealthPrediction.myBar:SetWidth(oufdb.HealthBar.Width * self:GetWidth() / oufdb.Width) -- needed for 25/40 man raid width downscaling!
-		self.HealthPrediction.myBar:SetStatusBarTexture(Media:Fetch("statusbar", oufdb.HealthPredictionBar.Texture))
-		self.HealthPrediction.myBar:GetStatusBarTexture():SetVertexColor(oufdb.HealthPredictionBar.MyColor.r, oufdb.HealthPredictionBar.MyColor.g, oufdb.HealthPredictionBar.MyColor.b, oufdb.HealthPredictionBar.MyColor.a)
+		if not health.HealingPlayer then
+			health.HealingPlayer = CreateFrame("StatusBar", nil, health)
+			health.HealingOther = CreateFrame("StatusBar", nil, health)
+		end
 
-		self.HealthPrediction.otherBar:SetWidth(oufdb.HealthBar.Width * self:GetWidth() / oufdb.Width) -- needed for 25/40 man raid width downscaling!
-		self.HealthPrediction.otherBar:SetStatusBarTexture(Media:Fetch("statusbar", oufdb.HealthPredictionBar.Texture))
-		self.HealthPrediction.otherBar:GetStatusBarTexture():SetVertexColor(oufdb.HealthPredictionBar.OtherColor.r, oufdb.HealthPredictionBar.OtherColor.g, oufdb.HealthPredictionBar.OtherColor.b, oufdb.HealthPredictionBar.OtherColor.a)
+		local myBar, otherBar = health.HealingPlayer, health.HealingOther
+		local width = oufdb.HealthBar.Width * self:GetWidth() / oufdb.Width
+		local texture = Media:Fetch("statusbar", db.Texture)
 
-		self.HealthPrediction.myBar:ClearAllPoints()
-		self.HealthPrediction.myBar:SetPoint("TOPLEFT", self.Health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
-		self.HealthPrediction.myBar:SetPoint("BOTTOMLEFT", self.Health:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
+		myBar:SetAlpha(1)
+		myBar:SetWidth(width)
+		myBar:SetStatusBarTexture(texture)
+		myBar:GetStatusBarTexture():SetVertexColor(db.MyColor.r, db.MyColor.g, db.MyColor.b, db.MyColor.a)
+		myBar:ClearAllPoints()
+		myBar:SetPoint("TOPLEFT", health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
+		myBar:SetPoint("BOTTOMLEFT", health:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
 
-		self.HealthPrediction.otherBar:SetPoint("TOPLEFT", self.HealthPrediction.myBar:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
-		self.HealthPrediction.otherBar:SetPoint("BOTTOMLEFT", self.HealthPrediction.myBar:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
+		otherBar:SetAlpha(1)
+		otherBar:SetWidth(width)
+		otherBar:SetStatusBarTexture(texture)
+		otherBar:GetStatusBarTexture():SetVertexColor(db.OtherColor.r, db.OtherColor.g, db.OtherColor.b, db.OtherColor.a)
+		otherBar:ClearAllPoints()
+		otherBar:SetPoint("TOPLEFT", myBar:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
+		otherBar:SetPoint("BOTTOMLEFT", myBar:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
 	end,
 
 	TotalAbsorb = function(self, unit, oufdb)
-		if not self.TotalAbsorb then
-			self.TotalAbsorb = CreateFrame('StatusBar', nil, self.Health)
+		local db = oufdb.TotalAbsorbBar
+		local health = self.Health
+		if not db.Enable then
+			if health.DamageAbsorb then health.DamageAbsorb:SetAlpha(0) end
+			return
 		end
 
-		self.TotalAbsorb.maxOverflow = 1
-		
-		self.TotalAbsorb:SetWidth(oufdb.HealthBar.Width * self:GetWidth() / oufdb.Width) -- needed for 25/40 man raid width downscaling!
-		self.TotalAbsorb:SetStatusBarTexture(Media:Fetch("statusbar", oufdb.TotalAbsorbBar.Texture))
-		self.TotalAbsorb:GetStatusBarTexture():SetVertexColor(oufdb.TotalAbsorbBar.MyColor.r, oufdb.TotalAbsorbBar.MyColor.g, oufdb.TotalAbsorbBar.MyColor.b, oufdb.TotalAbsorbBar.MyColor.a)
+		if not health.DamageAbsorb then
+			health.DamageAbsorb = CreateFrame("StatusBar", nil, health)
+		end
 
-		self.TotalAbsorb:ClearAllPoints()
-		self.TotalAbsorb:SetPoint("TOPLEFT", self.Health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
-		self.TotalAbsorb:SetPoint("BOTTOMLEFT", self.Health:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
-
-		--self.TotalAbsorb.Override = TotalAbsorbOverride
+		local absorb = health.DamageAbsorb
+		absorb:SetAlpha(1)
+		absorb:SetWidth(oufdb.HealthBar.Width * self:GetWidth() / oufdb.Width)
+		absorb:SetStatusBarTexture(Media:Fetch("statusbar", db.Texture))
+		absorb:GetStatusBarTexture():SetVertexColor(db.MyColor.r, db.MyColor.g, db.MyColor.b, db.MyColor.a)
+		absorb:ClearAllPoints()
+		absorb:SetPoint("TOPLEFT", health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
+		absorb:SetPoint("BOTTOMLEFT", health:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
 	end,
 	
 	V2Textures = function(from, to)
@@ -2693,7 +2607,9 @@ module.funcs = {
 
 			-- needed for the options
 			from.V2Tex = V2Tex
-			to._V2Tex = V2Tex
+			if to then
+    			to._V2Tex = V2Tex
+			end
 
 			V2Tex.from = from
 			V2Tex.to = to
@@ -2712,6 +2628,9 @@ module.funcs = {
 ------------------------------------------------------------------------
 
 local function SetStyle(self, unit, isSingle)
+	local runtimeUnit = unit
+	local previewStyleUnit = module.previewStyleUnit
+	if previewStyleUnit then unit = previewStyleUnit end
 	local oufdb
 
 	if unit == "vehicle" then
@@ -2757,8 +2676,8 @@ local function SetStyle(self, unit, isSingle)
 	module.funcs.Power(self, unit, oufdb)
 	module.funcs.FrameBackdrop(self, unit, oufdb)
 
-	if oufdb.HealthPredictionBar and oufdb.HealthPredictionBar.Enable and false then module.funcs.HealthPrediction(self, unit, oufdb) end
-	if oufdb.TotalAbsorbBar and oufdb.TotalAbsorbBar.Enable and false then module.funcs.TotalAbsorb(self, unit, oufdb) end
+	if oufdb.HealthPredictionBar then module.funcs.HealthPrediction(self, unit, oufdb) end
+	if oufdb.TotalAbsorbBar then module.funcs.TotalAbsorb(self, unit, oufdb) end
 
 	------------------------------------------------------------------------
 	--	Texts
@@ -2810,24 +2729,17 @@ local function SetStyle(self, unit, isSingle)
 
 	if unit == "player" then
 		
-		if LUI.DEATHKNIGHT then
-			if oufdb.RunesBar.Enable then
-				module.funcs.Runes(self, unit, oufdb)
-			end
-		elseif LUI.DRUID then
-			if oufdb.AdditionalPowerBar.Enable then module.funcs.AdditionalPower(self, unit, oufdb) end
-			if oufdb.ClassPowerBar.Enable then module.funcs.ClassPower(self, unit, oufdb) end
-		elseif LUI.PALADIN or LUI.MONK or LUI.ROGUE or LUI.WARLOCK then
-			if oufdb.ClassPowerBar.Enable then module.funcs.ClassPower(self, unit, oufdb) end
-		elseif LUI.SHAMAN then
-			if oufdb.AdditionalPowerBar.Enable then module.funcs.AdditionalPower(self, unit, oufdb) end
-			if oufdb.TotemsBar.Enable then module.funcs.Totems(self, unit, oufdb) end
-		elseif LUI.MAGE then
-			if oufdb.ClassPowerBar.Enable then module.funcs.ClassPower(self, unit, oufdb) end
-		elseif LUI.EVOKER then
-			if oufdb.ClassPowerBar.Enable then module.funcs.ClassPower(self, unit, oufdb) end
-		elseif LUI.PRIEST then
-			if oufdb.AdditionalPowerBar.Enable then module.funcs.AdditionalPower(self, unit, oufdb) end
+		if LUI.DEATHKNIGHT and oufdb.RunesBar.Enable then
+			module.funcs.Runes(self, unit, oufdb)
+		end
+		if supportsClassPower and oufdb.ClassPowerBar.Enable then
+			module.funcs.ClassPower(self, unit, oufdb)
+		end
+		if (LUI.DRUID or LUI.PRIEST or LUI.SHAMAN) and oufdb.AdditionalPowerBar.Enable then
+			module.funcs.AdditionalPower(self, unit, oufdb)
+		end
+		if LUI.SHAMAN and oufdb.TotemsBar.Enable then
+			module.funcs.Totems(self, unit, oufdb)
 		end
 	end
 	
@@ -2844,19 +2756,29 @@ local function SetStyle(self, unit, isSingle)
 	--	Other
 	------------------------------------------------------------------------
 	
-	if oufdb.Portrait.Enable then module.funcs.Portrait(self, unit, oufdb) end
+	if oufdb.Portrait.Enable then module.funcs.Portrait(self, previewStyleUnit and runtimeUnit or unit, oufdb) end
 
 	if unit == "player" or unit == "pet" then
 		if module.db.profile.player.AlternativePowerBar.Enable then module.funcs.AlternativePower(self, unit, oufdb) end
 	end
 
 	if oufdb.Aura then
-		if oufdb.Aura.Buffs.Enable then module.funcs.Buffs(self, unit, oufdb) end
-		if oufdb.Aura.Debuffs.Enable then module.funcs.Debuffs(self, unit, oufdb) end
+		if oufdb.Aura.Buffs.Enable then
+			module.funcs.Buffs(self, previewStyleUnit and runtimeUnit or unit, oufdb)
+		elseif self.Buffs then
+			if self.Buffs.SetEnabled then self.Buffs:SetEnabled(false) end
+			self.Buffs:Hide()
+		end
+		if oufdb.Aura.Debuffs.Enable then
+			module.funcs.Debuffs(self, previewStyleUnit and runtimeUnit or unit, oufdb)
+		elseif self.Debuffs then
+			if self.Debuffs.SetEnabled then self.Debuffs:SetEnabled(false) end
+			self.Debuffs:Hide()
+		end
 	end
 
 	if oufdb.CombatFeedback then module.funcs.CombatFeedbackText(self, unit, oufdb) end
-	if module.db.profile.Settings.Castbars and oufdb.Castbar and oufdb.Castbar.General.Enable then
+	if module:UnitSupportsCastbar(unit) and oufdb.Castbar and oufdb.Castbar.General.Enable then
 		module.funcs.Castbar(self, unit, oufdb)
 	end
 	if oufdb.Border.Aggro then module.funcs.AggroGlow(self, unit, oufdb) end
@@ -2909,10 +2831,19 @@ local function SetStyle(self, unit, isSingle)
 			outsideAlpha = 0.5
 		}
 	end
-	self.Health.Override = OverrideHealth
-	self.Power.Override = OverridePower
+	self.Health.Override = nil
+	self.Power.Override = nil
+	self.Health.PostUpdate = PostUpdateHealth
+	self.Health.PostUpdateColor = PostUpdateHealthColor
+	self.Power.PostUpdate = PostUpdatePower
+	self.Power.PostUpdateColor = PostUpdatePowerColor
 
-	self.__unit = unit
+	self.LUIStyleUnit = unit
+	self.__unit = previewStyleUnit and runtimeUnit or unit
+	if previewStyleUnit then
+		self.LUIPreview = true
+		self.LUIPreviewUnit = runtimeUnit
+	end
 
 	if oufdb.Enable == false then self:Disable() end
 

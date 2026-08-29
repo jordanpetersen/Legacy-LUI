@@ -26,11 +26,11 @@ function module:CreateSettings(order)
 					if f == "oUF_LUI_targettarget" then
 						module.funcs.V2Textures(oUF_LUI_targettarget, oUF_LUI_target)
 					elseif f == "oUF_LUI_targettargettarget" then
-						module.V2Textures(_G.oUF_LUI_targettargettarget, oUF_LUI_targettarget)
+						module.funcs.V2Textures(_G.oUF_LUI_targettargettarget, oUF_LUI_targettarget)
 					elseif f == "oUF_LUI_focustarget" then
-						module.oUF_LUI.funcs.V2Textures(oUF_LUI_focustarget, oUF_LUI_focus)
+						module.funcs.V2Textures(oUF_LUI_focustarget, oUF_LUI_focus)
 					elseif f == "oUF_LUI_focus" then
-						module.oUF_LUI.funcs.V2Textures(oUF_LUI_focus, oUF_LUI_player)
+						module.funcs.V2Textures(oUF_LUI_focus, oUF_LUI_player)
 					end
 				end
 				if Enable then
@@ -84,48 +84,20 @@ function module:CreateSettings(order)
 		end
 	end
 
-	local toggleCB = function(info, Enable)
-		for unit, frames in pairs(self.framelist) do
-			if self.defaults[unit].Castbar then
-				for _, frame in pairs(frames) do
-					if _G[frame] then
-						frame = _G[frame]
-						if Enable then
-							if module.db.profile[unit].Castbar.Enable ~= false then
-								if not frame.Castbar then module.funcs.Castbar(frame, frame.__unit, module.db.profile[unit]) end
-								frame:EnableElement("Castbar")
-							end
-						else
-							if frame.Castbar then
-								frame:DisableElement("Castbar")
-								frame.Castbar:Hide()
-							end
-						end
-						frame:UpdateAllElements('refreshUnit')
-					end
-				end
+	local function ApplyAllUnitframeSettings()
+		for unit in pairs(module.framelist) do
+			if module.db.profile[unit] then
+				module.ApplySettings(unit)
 			end
 		end
 	end
 
+	local toggleCB = function()
+		ApplyAllUnitframeSettings()
+	end
+
 	local updateAuraTimer = function()
-		for k, v in pairs(oUF.objects) do
-			local aura_db = module.db.profile.Settings
-			if v.Buffs then
-				for i = 1, 50 do
-					if v.Buffs[i] then
-						v.Buffs[i].remaining:SetFont(Media:Fetch("font",  aura_db.AuratimerFont), aura_db.AuratimerSize, aura_db.AuratimerFlag)
-					end
-				end
-			end
-			if v.Debuffs then
-				for i = 1, 50 do
-					if v.Debuffs[i] then
-						v.Debuffs[i].remaining:SetFont(Media:Fetch("font",  aura_db.AuratimerFont), aura_db.AuratimerSize, aura_db.AuratimerFlag)
-					end
-				end
-			end
-		end
+		ApplyAllUnitframeSettings()
 	end
 
 	local options = self:NewGroup("Settings", order, true, {

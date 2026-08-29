@@ -53,7 +53,6 @@ local GAP = 10
 local totalGuild = 0 --luacheck: ignore
 local onlineGuild = 0
 local infotip
-local onBlock
 
 -- ####################################################################################################################
 -- ##### Infotip Setup ################################################################################################
@@ -116,7 +115,7 @@ function element:UpdateGuildAnchorPoints(i)
 end
 
 function element:UpdateInfotip()
-	if infotip and onBlock then
+	if infotip and infotip:IsShown() then
 		infotip:UpdateTooltip()
 	end
 end
@@ -279,7 +278,14 @@ function element.OnEnter(frame_)
 				member.unit = fullName
 				member.guildIndex = i
 				member.name:SetText(statusString..name)
-				member.name:SetTextColor(element:RGB(class))
+				-- Current clients normally return the locale-independent class
+				-- token here. Keep compatibility with clients returning the
+				-- localized class name so guild names do not fall back to white.
+				local classToken = class
+				if class and not issecretvalue(class) then
+					classToken = LUI:GetTokenFromClassName(class) or class
+				end
+				member.name:SetTextColor(LUI:GetClassColor(classToken))
 				member:SetClassIcon(member.class, class)
 
 				--Level Column
@@ -350,13 +356,11 @@ function element.OnEnter(frame_)
 	infotip:SetWidth(maxWidth)
 	infotip:SetHeight(maxHeight)
 	infotip:Show()
-	onBlock = true
 end
 
 function element.OnLeave(frame_)
-	if not infotip:IsMouseOver() then
+	if infotip and not infotip:IsMouseOver() then
 		infotip:Hide()
-		onBlock = false
 	end
 end
 
